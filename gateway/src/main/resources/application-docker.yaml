@@ -1,0 +1,33 @@
+server:
+  ssl:
+    enabled: true
+    key-store: "file:/app/certs/gateway.p12"
+    key-store-password: ${CERT_PASSWORD}
+    trust-store: "file:/app/certs/truststore.p12"
+    trust-store-password: ${CERT_PASSWORD}
+
+spring:
+  data:
+    redis:
+      host: redis-container
+      port: 6379
+      password: ${REDIS_PASSWORD}
+
+jwt:
+  private-key-path: "file:/app/certs/jwt_private_pkcs8.pem"
+  public-key-path: "file:/app/certs/jwt_public.pem"
+
+eureka:
+  instance:
+    hostname: gateway
+    prefer-ip-address: true
+  client:
+    service-url:
+      defaultZone: https://${EUREKA_USERNAME}:${EUREKA_PASSWORD}@eureka-server:8761/eureka/
+    tls:
+      enabled: true
+      trust-store: "file:/app/certs/truststore.p12"
+      trust-store-password: ${CERT_PASSWORD}
+      key-store: "file:/app/certs/gateway.p12"
+      key-store-password: ${CERT_PASSWORD}
+      key-password: ${CERT_PASSWORD}

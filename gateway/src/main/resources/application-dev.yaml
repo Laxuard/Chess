@@ -1,0 +1,43 @@
+server:
+  ssl:
+    enabled: true
+    key-store: "file:/home/yjazouli/1337/certs/gateway.p12"
+    key-store-password: ${CERT_PASSWORD:password}
+    trust-store: "file:/home/yjazouli/1337/certs/truststore.p12"
+    trust-store-password: ${CERT_PASSWORD:password}
+
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: ${REDIS_PASSWORD:password}
+
+jwt:
+  private-key-path: "file:/home/yjazouli/1337/certs/jwt_private_pkcs8.pem"
+  public-key-path: "file:/home/yjazouli/1337/certs/jwt_public.pem"
+
+
+eureka:
+  instance:
+    hostname: localhost
+  client:
+    service-url:
+      defaultZone: https://${EUREKA_USERNAME:admin}:${EUREKA_PASSWORD:password}@localhost:8761/eureka/
+    tls:
+      enabled: true
+      trust-store: "file:/home/yjazouli/1337/certs/truststore.p12"
+      trust-store-password: ${CERT_PASSWORD:password}
+      key-store: "file:/home/yjazouli/1337/certs/gateway.p12"
+      key-store-password: ${CERT_PASSWORD:password}
+      key-password: ${CERT_PASSWORD:password}
+
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: always

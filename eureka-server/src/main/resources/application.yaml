@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: eureka-server
+  security:
+    user:
+      name: ${EUREKA_USERNAME:admin}
+      password: ${EUREKA_PASSWORD:password}
+      roles: SYSTEM
+
+
+server:
+  port: 8761
+
+eureka:
+  instance:
+    hostname: localhost
+  client:
+    fetch-registry: false
+    register-with-eureka: false
