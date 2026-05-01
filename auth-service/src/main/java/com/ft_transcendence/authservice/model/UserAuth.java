@@ -37,6 +37,11 @@ public class UserAuth {
 
     private String password;
 
+    @Builder.Default
+    @Column(nullable = false)
+    @Enumerated(EnumType.STRING)
+    private UserRole role = UserRole.USER;
+
     // === Account Lifecycle ===
     @Builder.Default
     private boolean enabled = true;
@@ -65,6 +70,11 @@ public class UserAuth {
     @Builder.Default
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<UserIdentity> identities = new ArrayList<>();
+
+    public void addIdentity(UserIdentity identity) {
+        identities.add(identity);
+        identity.setUser(this);
+    }
 
     // === Auditing ===
     @CreatedDate
