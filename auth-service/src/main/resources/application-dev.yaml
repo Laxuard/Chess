@@ -1,26 +1,17 @@
 server:
   ssl:
     enabled: true
-    key-store: "file:/home/yjazouli/test/certs/gateway.p12"
+    key-store: "file:/home/yjazouli/test/certs/auth-service.p12"
     key-store-password: ${CERT_PASSWORD:password}
     trust-store: "file:/home/yjazouli/test/certs/truststore.p12"
     trust-store-password: ${CERT_PASSWORD:password}
 
-spring:
-  data:
-    redis:
-      host: localhost
-      port: 6380
-      password: ${REDIS_PASSWORD:password}
-
-jwt:
-  private-key-path: "file:/home/yjazouli/test/certs/jwt_private_pkcs8.pem"
-  public-key-path: "file:/home/yjazouli/test/certs/jwt_public.pem"
-
-
 eureka:
   instance:
     hostname: localhost
+    non-secure-port-enabled: false
+    secure-port-enabled: true
+    secure-port: ${server.port}
   client:
     service-url:
       defaultZone: https://${EUREKA_USERNAME:admin}:${EUREKA_PASSWORD:password}@localhost:8761/eureka/
@@ -28,9 +19,24 @@ eureka:
       enabled: true
       trust-store: "file:/home/yjazouli/test/certs/truststore.p12"
       trust-store-password: ${CERT_PASSWORD:password}
-      key-store: "file:/home/yjazouli/test/certs/gateway.p12"
+      key-store: "file:/home/yjazouli/test/certs/auth-service.p12"
       key-store-password: ${CERT_PASSWORD:password}
       key-password: ${CERT_PASSWORD:password}
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/${DB_NAME:db}
+    username: ${DB_USER:admin}
+    password: ${DB_PASSWORD:password}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
 
 
 management:

@@ -46,6 +46,7 @@ generate_service_cert() {
 
 echo "[3/4] Generating Service SSL Briefcases..."
 generate_service_cert "gateway"
+generate_service_cert "auth-service"
 generate_service_cert "eureka-server"
 # Add Librarian or other services here if they need their own .p12 for mTLS
 # generate_service_cert "librarian"

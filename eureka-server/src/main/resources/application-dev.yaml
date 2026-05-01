@@ -1,8 +1,8 @@
 server:
   ssl:
     enabled: true
-    key-store: "file:/home/yjazouli/1337/certs/eureka-server.p12"
+    key-store: "file:/home/yjazouli/test/certs/eureka-server.p12"
     key-store-password: ${CERT_PASSWORD:password}
-    trust-store: "file:/home/yjazouli/1337/certs/truststore.p12"
+    trust-store: "file:/home/yjazouli/test/certs/truststore.p12"
     trust-store-password: ${CERT_PASSWORD:password}
 
