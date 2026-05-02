@@ -1,0 +1,2 @@
+app:
+  error-docs-url: "https://gateway:8080/docs/errors#"

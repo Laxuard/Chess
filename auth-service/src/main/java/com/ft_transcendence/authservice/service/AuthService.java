@@ -1,5 +1,6 @@
 package com.ft_transcendence.authservice.service;
 
+import com.ft_transcendence.authservice.exception.DuplicateResourceException;
 import com.ft_transcendence.authservice.model.AuthProvider;
 import com.ft_transcendence.authservice.model.UserIdentity;
 import lombok.RequiredArgsConstructor;
@@ -21,10 +22,10 @@ public class AuthService {
     public UserAuth register(RegisterRequest request)
     {
         if (userAuthRepository.existsByEmail(request.email())) {
-            throw new RuntimeException("Email already exists");
+            throw new DuplicateResourceException("Email already exists");
         }
         if (userAuthRepository.existsByUsername(request.username())) {
-            throw new RuntimeException("Username already exists");
+            throw new DuplicateResourceException("Username already exists");
         }
 
         UserAuth userAuth = UserAuth.builder()
@@ -41,6 +42,7 @@ public class AuthService {
 
         userAuth.addIdentity(userIdentity);
 
+        // broadcast later before finishing.
 
         return userAuthRepository.save(userAuth);
     }

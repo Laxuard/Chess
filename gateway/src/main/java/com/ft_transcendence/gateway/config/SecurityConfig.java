@@ -1,12 +1,12 @@
 package com.ft_transcendence.gateway.config;
 
-import com.ft_transcendence.gateway.util.RSAKeyUtils;
 import org.springframework.context.annotation.Bean;
+import com.ft_transcendence.gateway.util.RSAKeyUtils;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.web.server.SecurityWebFilterChain;
+import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
-import org.springframework.security.config.web.server.ServerHttpSecurity;
-import org.springframework.security.web.server.SecurityWebFilterChain;
 
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
