@@ -1,9 +1,9 @@
 server:
   ssl:
     enabled: true
-    key-store: "file:/home/yjazouli/test/certs/auth-service.p12"
+    key-store: "file:${user.home}/1337/Microservices/certs/auth-service.p12"
     key-store-password: ${CERT_PASSWORD:password}
-    trust-store: "file:/home/yjazouli/test/certs/truststore.p12"
+    trust-store: "file:${user.home}/1337/Microservices/certs/truststore.p12"
     trust-store-password: ${CERT_PASSWORD:password}
 
 eureka:
@@ -17,9 +17,9 @@ eureka:
       defaultZone: https://${EUREKA_USERNAME:admin}:${EUREKA_PASSWORD:password}@localhost:8761/eureka/
     tls:
       enabled: true
-      trust-store: "file:/home/yjazouli/test/certs/truststore.p12"
+      trust-store: "file:${user.home}/1337/Microservices/certs/truststore.p12"
       trust-store-password: ${CERT_PASSWORD:password}
-      key-store: "file:/home/yjazouli/test/certs/auth-service.p12"
+      key-store: "file:${user.home}/1337/Microservices/certs/auth-service.p12"
       key-store-password: ${CERT_PASSWORD:password}
       key-password: ${CERT_PASSWORD:password}
 

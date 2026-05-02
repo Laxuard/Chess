@@ -1,9 +1,9 @@
 server:
   ssl:
     enabled: true
-    key-store: "file:/home/yjazouli/test/certs/gateway.p12"
+    key-store: "file:${user.home}/1337/Microservices/certs/gateway.p12"
     key-store-password: ${CERT_PASSWORD:password}
-    trust-store: "file:/home/yjazouli/test/certs/truststore.p12"
+    trust-store: "file:${user.home}/1337/Microservices/certs/truststore.p12"
     trust-store-password: ${CERT_PASSWORD:password}
 
 spring:
@@ -14,8 +14,8 @@ spring:
       password: ${REDIS_PASSWORD:password}
 
 jwt:
-  private-key-path: "file:/home/yjazouli/test/certs/jwt_private_pkcs8.pem"
-  public-key-path: "file:/home/yjazouli/test/certs/jwt_public.pem"
+  private-key-path: "file:${user.home}/1337/Microservices/certs/jwt_private_pkcs8.pem"
+  public-key-path: "file:${user.home}/1337/Microservices/certs/jwt_public.pem"
 
 
 eureka:
@@ -26,9 +26,9 @@ eureka:
       defaultZone: https://${EUREKA_USERNAME:admin}:${EUREKA_PASSWORD:password}@localhost:8761/eureka/
     tls:
       enabled: true
-      trust-store: "file:/home/yjazouli/test/certs/truststore.p12"
+      trust-store: "file:${user.home}/1337/Microservices/certs/truststore.p12"
       trust-store-password: ${CERT_PASSWORD:password}
-      key-store: "file:/home/yjazouli/test/certs/gateway.p12"
+      key-store: "file:${user.home}/1337/Microservices/certs/gateway.p12"
       key-store-password: ${CERT_PASSWORD:password}
       key-password: ${CERT_PASSWORD:password}
 
