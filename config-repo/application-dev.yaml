@@ -1,0 +1,12 @@
+server:
+  ssl:
+    trust-store: file:${CERT_DIR_PATH}/truststore/truststore.p12
+    key-store: file:${CERT_DIR_PATH}/services/${spring.application.name}/${spring.application.name}.p12
+
+eureka:
+  client:
+    tls:
+      trust-store: file:${CERT_DIR_PATH}/truststore/truststore.p12
+      key-store: file:${CERT_DIR_PATH}/services/${spring.application.name}/${spring.application.name}.p12
+    service-url:
+      defaultZone: https://${EUREKA_USERNAME}:${EUREKA_PASSWORD}@localhost:${EUREKA_PORT}/eureka/

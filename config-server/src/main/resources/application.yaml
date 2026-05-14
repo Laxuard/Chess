@@ -1,0 +1,16 @@
+server:
+  port: ${CONFIG_SERVER_PORT:8888}
+  ssl:
+    enabled: true
+    client-auth: need
+    key-store-type: PKCS12
+    trust-store-type: PKCS12
+    key-alias: config-server
+    key-store-password: ${CERT_PASSWORD}
+    trust-store-password: ${CERT_PASSWORD}
+
+spring:
+  application:
+    name: config-server
+  profiles:
+    active: native

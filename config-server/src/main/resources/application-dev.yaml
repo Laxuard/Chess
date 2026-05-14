@@ -1,0 +1,13 @@
+server:
+  ssl:
+    trust-store: file:${CERT_DIR_PATH}/truststore/truststore.p12
+    key-store: file:${CERT_DIR_PATH}/services/config-server/config-server.p12
+
+spring:
+  cloud:
+    config:
+      server:
+        native:
+          search-locations:
+            - file:${CONFIG_REPO_PATH}
+            - file:${CONFIG_REPO_PATH}/{application}

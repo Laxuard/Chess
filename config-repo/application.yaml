@@ -1,0 +1,59 @@
+# ==========================================
+# GLOBAL MICROSERVICE CONFIGURATION
+# ==========================================
+
+# == 1. Server & Security Configuration ==
+server:
+  ssl:
+    enabled: true
+    client-auth: need
+    key-store-type: PKCS12
+    trust-store-type: PKCS12
+    key-alias: "${spring.application.name}"
+    key-store-password: "${CERT_PASSWORD}"
+    trust-store-password: "${CERT_PASSWORD}"
+  error:
+    # 1. Kill the stack traces for security
+    include-stacktrace: never
+    # 2. Include the exception message
+    include-message: always
+    # 3. Include validation errors
+    include-binding-errors: always
+    # 4. Hide the specific exception class name
+    include-exception: false
+
+# == 2. Spring Core Configuration ==
+spring:
+  mvc:
+    problemdetails:
+      enabled: true
+  webflux:
+    problemdetails:
+      enabled: true
+
+# == 3. Eureka Discovery Configuration ==
+eureka:
+  instance:
+    prefer-ip-address: true
+    secure-port-enabled: true
+    non-secure-port-enabled: false
+  client:
+    tls:
+      enabled: true
+      key-store-password: "${CERT_PASSWORD}"
+      trust-store-password: "${CERT_PASSWORD}"
+
+# == 4. Observability & Actuator ==
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: always
+
+# == 5. Logging Configuration ==
+logging:
+  pattern:
+    console: "%d{HH:mm:ss} [%X{trace_id}] %-5level %logger{36} - %msg%n"
