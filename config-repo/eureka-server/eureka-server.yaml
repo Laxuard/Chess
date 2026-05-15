@@ -4,6 +4,8 @@
 
 server:
   port: ${EUREKA_PORT}
+  ssl:
+    client-auth: want
 
 eureka:
   client:

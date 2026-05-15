@@ -25,6 +25,11 @@ spring:
       # == SSL Configuration for WebClient ==
       httpclient:
         ssl:
+          # Trust our internal CA for all outbound calls to backend services
+          trust-store: "file:${CERT_DIR_PATH}/truststore/truststore.p12"
+          trust-store-type: PKCS12
+          trust-store-password: "${CERT_PASSWORD}"
+          # Present gateway's client cert (mTLS client side)
           key-store-type: PKCS12
           key-password: "${CERT_PASSWORD}"
           key-store-password: "${CERT_PASSWORD}"
