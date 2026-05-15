@@ -16,7 +16,6 @@ import com.ft_transcendence.authservice.dto.response.RegisterResponse;
 
 
 @RestController
-@RequestMapping("/auth")
 @RequiredArgsConstructor
 public class AuthController {
 

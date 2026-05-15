@@ -1,8 +1,16 @@
-server:
-  ssl:
-    enabled: true
-    key-store: "file:${user.home}/1337/Microservices/certs/eureka-server.p12"
-    key-store-password: ${CERT_PASSWORD:password}
-    trust-store: "file:${user.home}/1337/Microservices/certs/truststore.p12"
-    trust-store-password: ${CERT_PASSWORD:password}
+spring:
+  config:
+    import: "optional:configserver:https://localhost:${CONFIG_SERVER_PORT}"
+  cloud:
+    config:
+      tls:
+        enabled: true
+        key-store-type: PKCS12
+        trust-store-type: PKCS12
+        key-store: "file:${CERT_DIR_PATH}/services/${spring.application.name}/${spring.application.name}.p12"
+        key-store-password: "${CERT_PASSWORD}"
+        key-password: "${CERT_PASSWORD}"
+        trust-store: "file:${CERT_DIR_PATH}/truststore/truststore.p12"
+        trust-store-password: "${CERT_PASSWORD}"
+
 

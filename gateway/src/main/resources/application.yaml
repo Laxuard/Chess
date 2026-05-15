@@ -1,26 +1,3 @@
-#application.yml
-
-
 spring:
   application:
     name: gateway
-  session:
-    data:
-      redis:
-        namespace: "transcendence:session"
-        save-mode: on-set-attribute
-        repository-type: indexed
-  cloud:
-    gateway:
-      server:
-        webflux:
-          routes:
-            - id: auth-service
-              uri: lb://auth-service
-              predicates:
-                - Path=/api/auth/**
-              filters:
-                - StripPrefix=1
-server:
-  port: 8080
-

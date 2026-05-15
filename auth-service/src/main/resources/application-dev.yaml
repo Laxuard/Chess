@@ -1,52 +1,16 @@
-app:
-  error-docs-url: "https://localhost:8080/docs/errors#"
-
-server:
-  ssl:
-    enabled: true
-    key-store: "file:${user.home}/1337/Microservices/certs/auth-service.p12"
-    key-store-password: ${CERT_PASSWORD:password}
-    trust-store: "file:${user.home}/1337/Microservices/certs/truststore.p12"
-    trust-store-password: ${CERT_PASSWORD:password}
-
-eureka:
-  instance:
-    hostname: localhost
-    non-secure-port-enabled: false
-    secure-port-enabled: true
-    secure-port: ${server.port}
-  client:
-    service-url:
-      defaultZone: https://${EUREKA_USERNAME:admin}:${EUREKA_PASSWORD:password}@localhost:8761/eureka/
-    tls:
-      enabled: true
-      trust-store: "file:${user.home}/1337/Microservices/certs/truststore.p12"
-      trust-store-password: ${CERT_PASSWORD:password}
-      key-store: "file:${user.home}/1337/Microservices/certs/auth-service.p12"
-      key-store-password: ${CERT_PASSWORD:password}
-      key-password: ${CERT_PASSWORD:password}
-
 spring:
-  datasource:
-    url: jdbc:postgresql://localhost:5432/${DB_NAME:db}
-    username: ${DB_USER:admin}
-    password: ${DB_PASSWORD:password}
-    driver-class-name: org.postgresql.Driver
+  config:
+    import: "optional:configserver:https://localhost:${CONFIG_SERVER_PORT}"
+  cloud:
+    config:
+      tls:
+        enabled: true
+        key-store-type: PKCS12
+        trust-store-type: PKCS12
+        key-store: "file:${CERT_DIR_PATH}/services/${spring.application.name}/${spring.application.name}.p12"
+        key-store-password: "${CERT_PASSWORD}"
+        key-password: "${CERT_PASSWORD}"
+        trust-store: "file:${CERT_DIR_PATH}/truststore/truststore.p12"
+        trust-store-password: "${CERT_PASSWORD}"
 
-  jpa:
-    hibernate:
-      ddl-auto: update
-    show-sql: true
-    properties:
-      hibernate:
-        format_sql: true
 
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health
-  endpoint:
-    health:
-      show-details: always

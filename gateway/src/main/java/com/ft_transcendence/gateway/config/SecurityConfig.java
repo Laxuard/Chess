@@ -26,12 +26,12 @@ public class SecurityConfig {
 
     @Bean
     public RSAPrivateKey rsaPrivateKey() throws Exception {
-        return keyUtils.loadPrivateKey(jwtProperties.privateKeyPath());
+        return keyUtils.loadPrivateKey(jwtProperties.privateKeyLocation());
     }
 
     @Bean
     public RSAPublicKey rsaPublicKey() throws Exception {
-        return keyUtils.loadPublicKey(jwtProperties.publicKeyPath());
+        return keyUtils.loadPublicKey(jwtProperties.publicKeyLocation());
     }
 
     @Bean

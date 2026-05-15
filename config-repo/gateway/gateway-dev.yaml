@@ -1,0 +1,20 @@
+# ==========================================
+#  Gateway Dev Configuration
+# ==========================================
+
+spring:
+  data:
+    redis:
+      host: localhost
+  cloud:
+    gateway:
+      # == SSL Configuration for WebClient ==
+      httpclient:
+        ssl:
+          trustedX509Certificates:
+            - "file:${CERT_DIR_PATH}/rootCA/rootCA.crt"
+          key-store: "file:${CERT_DIR_PATH}/services/${spring.application.name}/${spring.application.name}.p12"
+custom:
+  jwt:
+    public-key-location: file:${CERT_DIR_PATH}/jwt/jwt_public.pem
+    private-key-location: file:${CERT_DIR_PATH}/jwt/jwt_private_pkcs8.pem

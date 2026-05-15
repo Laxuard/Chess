@@ -34,12 +34,15 @@ spring:
 # == 3. Eureka Discovery Configuration ==
 eureka:
   instance:
-    prefer-ip-address: true
+    prefer-ip-address: false
     secure-port-enabled: true
     non-secure-port-enabled: false
   client:
+    fetch-registry: true
+    register-with-eureka: true
     tls:
       enabled: true
+      key-password: "${CERT_PASSWORD}"
       key-store-password: "${CERT_PASSWORD}"
       trust-store-password: "${CERT_PASSWORD}"
 

@@ -1,0 +1,32 @@
+# ==========================================
+# AUTH SERVICE CORE BASE CONFIGURATION
+# ==========================================
+
+server:
+  port: ${AUTH_SERVICE_PORT}
+
+spring:
+  # == 1. Database Driver & Schema Config ==
+  datasource:
+    username: "${DB_USER}"
+    password: "${DB_PASSWORD}"
+    driver-class-name: org.postgresql.Driver
+  
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # == 2. Redis Connection & Session Management ==
+  session:
+    data:
+      redis:
+        namespace: "transcendence:sessions"
+        save-mode: on-set-attribute
+        repository-type: indexed
+  data:
+    redis:
+      port: ${REDIS_PORT}
+      password: "${REDIS_PASSWORD}"
