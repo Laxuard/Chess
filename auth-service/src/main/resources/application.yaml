@@ -4,6 +4,13 @@ spring:
   mvc:
     problem-details:
       enabled: true
+  session:
+    data:
+      redis:
+        namespace: "transcendence:session"
+        save-mode: on-set-attribute
+        repository-type: indexed
 
 server:
   port: 8081
+

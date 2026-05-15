@@ -18,6 +18,6 @@ spring:
                 - Path=/api/auth/**
               filters:
                 - StripPrefix=1
+
 server:
   port: 8080
-

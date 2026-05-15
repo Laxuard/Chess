@@ -26,6 +26,8 @@ eureka:
       key-store-password: ${CERT_PASSWORD:password}
       key-password: ${CERT_PASSWORD:password}
 
+
+
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/${DB_NAME:db}
@@ -40,6 +42,18 @@ spring:
     properties:
       hibernate:
         format_sql: true
+
+  data:
+    redis:
+      host: localhost
+      port: 6380
+      password: ${REDIS_PASSWORD:password}
+  security:
+    oauth2:
+      resource-server:
+        jwt:
+          jwk-set-uri: https://localhost:8080/.well-known/jwks.json
+
 
 
 management:

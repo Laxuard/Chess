@@ -54,9 +54,6 @@ public class UserAuth {
     private boolean deleted = false;
 
     // === Security Hardening ===
-    @Builder.Default
-    @Column(name = "auth_version")
-    private Integer authVersion = 0;
 
     // === 2FA ===
     @Builder.Default
