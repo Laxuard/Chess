@@ -11,15 +11,12 @@ spring:
       # == SSL Configuration for WebClient (Reactor Netty httpclient) ==
       httpclient:
         ssl:
-          # Use the shared PKCS12 truststore — same CA that signed all service certs
-          trust-store: "file:${CERT_DIR_PATH}/truststore/truststore.p12"
-          trust-store-type: PKCS12
-          trust-store-password: "${CERT_PASSWORD}"
-          # Present gateway's own client cert for outbound mTLS handshakes
-          key-store: "file:${CERT_DIR_PATH}/services/gateway/gateway.p12"
-          key-store-type: PKCS12
-          key-store-password: "${CERT_PASSWORD}"
-          key-password: "${CERT_PASSWORD}"
+          key-store: "file:${CERT_DIR_PATH}/services/${spring.application.name}/${spring.application.name}.p12"
+          
+          # 2. Verifying Downstream Identity (Replaces 'trust-store' with the raw Root CA)
+          trustedX509Certificates:
+            - "file:${CERT_DIR_PATH}/rootCA/rootCA.crt"
+          
 custom:
   jwt:
     public-key-location: file:${CERT_DIR_PATH}/jwt/jwt_public.pem
