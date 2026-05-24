@@ -1,5 +1,6 @@
 package com.ft_transcendence.authservice.controller;
 
+import com.ft_transcendence.authservice.config.SecurityUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import jakarta.servlet.http.HttpSession;
@@ -7,6 +8,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import com.ft_transcendence.authservice.model.UserAuth;
 import com.ft_transcendence.authservice.dto.UserMapper;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import com.ft_transcendence.authservice.service.AuthService;
@@ -29,8 +34,6 @@ public class AuthController {
         UserAuth savedUser = authService.register(request, session);
         AuthResponse response = userMapper.toRegisterResponse(savedUser);
 
-        session.setAttribute("userId", savedUser.getUserId());
-
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -40,9 +43,21 @@ public class AuthController {
         UserAuth loggedUser = authService.login(request, session);
         AuthResponse response = userMapper.toRegisterResponse(loggedUser);
 
-        session.setAttribute("userId", loggedUser.getUserId());
-
         return ResponseEntity.status(HttpStatus.OK).body(response);
+    }
+
+    @GetMapping("/users")
+// Secure method validation: Only users with the 'USER' role claim can execute this code!
+    @PreAuthorize("hasAuthority('SCOPE_USER') or hasRole('USER')")
+    public ResponseEntity<String> getProfile(@AuthenticationPrincipal Jwt jwt) {
+
+        // Extract the unique subject ID parsed from the Gateway token
+        String userId = jwt.getSubject();
+
+        // Extract any custom claims you added during the minting step
+        String traceId = jwt.getClaimAsString("tid");
+
+        return ResponseEntity.ok("Welcome back user: " + userId + " [Trace: " + traceId + "]");
     }
 
 }

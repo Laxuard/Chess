@@ -12,3 +12,9 @@ spring:
   data:
     redis:
       host: localhost
+  
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: "https://localhost:${GATEWAY_PORT}/.well-known/jwks.json"

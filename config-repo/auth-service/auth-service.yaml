@@ -4,12 +4,7 @@
 
 server:
   port: ${AUTH_SERVICE_PORT}
-  servlet:
-    session:
-      cookie:
-        secure: true
-        http-only: true
-        same-site: lax
+  forward-headers-strategy: framework
 
 spring:
   # == 1. Database Driver & Schema Config ==

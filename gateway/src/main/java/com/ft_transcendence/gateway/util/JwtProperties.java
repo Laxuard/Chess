@@ -1,4 +1,4 @@
-package com.ft_transcendence.gateway.config;
+package com.ft_transcendence.gateway.util;
 
 import org.springframework.core.io.Resource;
 import org.springframework.boot.context.properties.ConfigurationProperties;

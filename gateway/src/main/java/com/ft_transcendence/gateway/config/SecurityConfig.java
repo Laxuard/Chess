@@ -1,12 +1,16 @@
 package com.ft_transcendence.gateway.config;
 
+import com.nimbusds.jose.util.Resource;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import com.ft_transcendence.gateway.util.RSAKeyUtils;
+import com.ft_transcendence.gateway.util.JwtProperties;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
+import org.springframework.security.web.server.savedrequest.NoOpServerRequestCache;
 
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
@@ -18,7 +22,7 @@ public class SecurityConfig {
 
     private final RSAKeyUtils keyUtils;
     private final JwtProperties jwtProperties;
-
+    
     public SecurityConfig(RSAKeyUtils keyUtils, JwtProperties jwtProperties) {
         this.keyUtils = keyUtils;
         this.jwtProperties = jwtProperties;
@@ -38,26 +42,22 @@ public class SecurityConfig {
     public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http)
     {
         return http
-                .csrf(ServerHttpSecurity.CsrfSpec::disable)
 
                 .authorizeExchange(exchanges -> exchanges
-                        // Allow Eureka and Docker to ping the health of the Gateway
-                        .pathMatchers("/actuator/health/**").permitAll()
-
-                        // Example: Allow your login/auth endpoints to be public
-                        .pathMatchers("/api/auth/**").permitAll()
-
-                        .pathMatchers("/.well-known/**").permitAll()
-
-                        // Every other request MUST have a valid Redis Session
-                        .anyExchange().authenticated()
+                        .anyExchange().permitAll()
                 )
 
-                .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
+                .requestCache(cache -> cache
+                        .requestCache(NoOpServerRequestCache.getInstance()))
 
+                .csrf(ServerHttpSecurity.CsrfSpec::disable)
+                .logout(ServerHttpSecurity.LogoutSpec::disable)
+                .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
                 .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
+
 
                 .build();
     }
+
 
 }
