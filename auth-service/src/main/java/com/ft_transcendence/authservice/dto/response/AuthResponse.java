@@ -3,11 +3,8 @@ package com.ft_transcendence.authservice.dto.response;
 import java.util.UUID;
 import java.time.LocalDateTime;
 
-public record RegisterResponse(
+public record AuthResponse(
         UUID userId,
         String username,
-        String email,
-        String role,
-        LocalDateTime createdAt,
-        String message
+        Boolean is2FAEnabled
 ) {}

@@ -4,6 +4,12 @@
 
 server:
   port: ${AUTH_SERVICE_PORT}
+  servlet:
+    session:
+      cookie:
+        secure: true
+        http-only: true
+        same-site: lax
 
 spring:
   # == 1. Database Driver & Schema Config ==
@@ -21,9 +27,10 @@ spring:
 
   # == 2. Redis Connection & Session Management ==
   session:
+    timeout: 7d
     data:
       redis:
-        namespace: "transcendence:sessions"
+        namespace: "transcendence"
         save-mode: on-set-attribute
         repository-type: indexed
   data:

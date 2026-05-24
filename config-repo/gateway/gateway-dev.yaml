@@ -8,14 +8,14 @@ spring:
       host: localhost
   cloud:
     gateway:
+      server:
+        webflux:
       # == SSL Configuration for WebClient (Reactor Netty httpclient) ==
-      httpclient:
-        ssl:
-          key-store: "file:${CERT_DIR_PATH}/services/${spring.application.name}/${spring.application.name}.p12"
-          
-          # 2. Verifying Downstream Identity (Replaces 'trust-store' with the raw Root CA)
-          trustedX509Certificates:
-            - "file:${CERT_DIR_PATH}/rootCA/rootCA.crt"
+          httpclient:
+            ssl:
+              key-store: "file:${CERT_DIR_PATH}/services/${spring.application.name}/${spring.application.name}.p12"
+              trusted-x509-certificates:
+                - "file:${CERT_DIR_PATH}/rootCA/rootCA.crt"
           
 custom:
   jwt:

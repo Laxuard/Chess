@@ -1,5 +1,6 @@
 package com.ft_transcendence.authservice.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.*;
 import jakarta.persistence.*;
 import org.springframework.data.annotation.CreatedDate;
@@ -21,6 +22,7 @@ public class UserIdentity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private UserAuth user;

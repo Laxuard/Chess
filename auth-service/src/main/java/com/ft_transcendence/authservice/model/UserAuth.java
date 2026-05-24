@@ -8,7 +8,9 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Entity
@@ -38,9 +40,11 @@ public class UserAuth {
     private String password;
 
     @Builder.Default
-    @Column(nullable = false)
+    @Column(name = "role")
     @Enumerated(EnumType.STRING)
-    private UserRole role = UserRole.USER;
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_auth_id"))
+    private Set<UserRole> roles = new HashSet<>(Set.of(UserRole.USER));
 
     // === Account Lifecycle ===
     @Builder.Default

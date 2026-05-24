@@ -2,21 +2,18 @@ package com.ft_transcendence.authservice.dto;
 
 import org.springframework.stereotype.Component;
 import com.ft_transcendence.authservice.model.UserAuth;
-import com.ft_transcendence.authservice.dto.response.RegisterResponse;
+import com.ft_transcendence.authservice.dto.response.AuthResponse;
 
 @Component
 public class UserMapper {
 
-    public RegisterResponse toRegisterResponse(UserAuth userAuth) {
+    public AuthResponse toRegisterResponse(UserAuth userAuth) {
         if (userAuth == null) return null;
 
-        return new RegisterResponse(
+        return new AuthResponse(
                 userAuth.getUserId(),
                 userAuth.getUsername(),
-                userAuth.getEmail(),
-                userAuth.getRole().name(),
-                userAuth.getCreatedAt(),
-                "User registered successfully. Please log in."
+                userAuth.is2faEnabled()
         );
     }
 }
