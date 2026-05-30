@@ -1,17 +1,21 @@
 package com.ft_transcendence.auth.domain.service.twofactor;
 
 import com.ft_transcendence.auth.core.exception.InvalidCredentialsException;
+import com.ft_transcendence.auth.core.exception.MfaException;
 import com.ft_transcendence.auth.core.exception.ResourceNotFoundException;
 import com.ft_transcendence.auth.domain.dto.response.MfaResponse;
-import com.ft_transcendence.auth.domain.model.TwoFactorMethodType;
+import com.ft_transcendence.auth.domain.model.twofactor.TwoFactorMethodType;
 import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
-import jakarta.servlet.http.HttpSession;
+import org.springframework.session.FindByIndexNameSessionRepository;
+import org.springframework.session.Session;
+import org.springframework.session.SessionRepository;
+import org.springframework.session.data.redis.RedisIndexedSessionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.security.oauth2.jwt.Jwt;
 import com.ft_transcendence.auth.domain.model.UserAuth;
 import org.springframework.transaction.annotation.Transactional;
-import com.ft_transcendence.auth.domain.model.UserTwoFactorMethod;
+import com.ft_transcendence.auth.domain.model.twofactor.UserTwoFactorMethod;
 import com.ft_transcendence.auth.domain.repository.UserAuthRepository;
 import com.ft_transcendence.auth.domain.dto.request.MfaVerificationRequest;
 
@@ -26,6 +30,9 @@ public class TwoFactorService {
     private final UserAuthRepository userAuthRepository;
     private final TwoFactorStrategyFactory strategyFactory;
 
+    // TARGET CONCRETE MATCH: Directly autowires the actual underlying bean instance
+    private final RedisIndexedSessionRepository sessionRepository;
+
     /**
      * Phase 1: Initiates a new pending multi-factor registration context flow.
      * Passes raw objects to strategies and binds responses into universal envelopes.
@@ -37,8 +44,9 @@ public class TwoFactorService {
 
         boolean alreadyExists = user.getTwoFactorMethods().stream()
                 .anyMatch(m -> m.getMethodType() == type && m.isVerified());
+
         if (alreadyExists) {
-            throw new IllegalStateException("The multi-factor configuration option " + type + " is already active.");
+            throw new MfaException("The multi-factor configuration option " + type + " is already verified active on your account.");
         }
 
         user.getTwoFactorMethods().removeIf(m -> m.getMethodType() == type && !m.isVerified());
@@ -73,12 +81,12 @@ public class TwoFactorService {
         UserTwoFactorMethod methodContext = user.getTwoFactorMethods().stream()
                 .filter(m -> m.getMethodType() == type && !m.isVerified())
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("No pending configuration found for type: " + type));
+                .orElseThrow(() -> new MfaException("No pending configuration initialization sequence found for type: " + type + ". Run the /setup endpoint first."));
 
         boolean isValid = strategyFactory.getStrategy(type).verify(methodContext, request.code());
 
         if (!isValid) {
-            throw new InvalidCredentialsException("The initialization challenge code supplied is invalid or has expired.");
+            throw new InvalidCredentialsException("The verification challenge code supplied is incorrect or has expired.");
         }
 
         methodContext.setVerified(true);
@@ -98,22 +106,14 @@ public class TwoFactorService {
      * Phase 3: Validates a user's step-up login verification challenge code.
      */
     @Transactional
-    public MfaResponse verifyLoginChallenge(MfaVerificationRequest request, HttpSession session) {
-        Object userIdAttr = session.getAttribute("userId");
-        if (userIdAttr == null) {
-            throw new ResourceNotFoundException("No active half-logged session context available for challenge verification.");
-        }
-
-        UUID userId = UUID.fromString(userIdAttr.toString());
-        UserAuth user = userAuthRepository.findByUserId(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User identity reference not found for ID: " + userId));
-
+    public MfaResponse verifyLoginChallenge(MfaVerificationRequest request, Jwt jwt) {
+        UserAuth user = getUserFromJwt(jwt);
         TwoFactorMethodType type = request.methodType();
 
         UserTwoFactorMethod methodContext = user.getTwoFactorMethods().stream()
                 .filter(m -> m.getMethodType() == type && m.isVerified())
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("No active configuration verified for type: " + type));
+                .orElseThrow(() -> new MfaException("No active verified " + type + " security mechanism is configured for this account."));
 
         boolean isValid = strategyFactory.getStrategy(type).verify(methodContext, request.code());
 
@@ -124,7 +124,23 @@ public class TwoFactorService {
         methodContext.setLastUsedAt(LocalDateTime.now());
         userAuthRepository.save(user);
 
-        session.setAttribute("isFullyAuthenticated", true);
+        String originalSessionId = jwt.getClaimAsString("sid");
+        if (originalSessionId == null || originalSessionId.isBlank()) {
+            throw new MfaException("Session reference context pointer ('sid') claim missing from Transit JWT schema boundaries.");
+        }
+
+        // 2. Fetch the session directly out of the shared Redis cluster database pool
+        RedisIndexedSessionRepository.RedisSession originalSession = sessionRepository.findById(originalSessionId);
+        if (originalSession == null) {
+            throw new ResourceNotFoundException("Original authentication session tracking context");
+        }
+
+        // 3. Update the state value to clear your edge Gateway filtering constraints
+        originalSession.setAttribute("isFullyAuthenticated", true);
+
+        // 4. Flush the changes to the persistence layer
+        sessionRepository.save(originalSession);
+
         log.info("User [{}] successfully cleared login challenge via: {}", user.getUsername(), type);
 
         return MfaResponse.builder()

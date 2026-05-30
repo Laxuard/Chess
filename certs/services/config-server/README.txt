@@ -1,5 +1,5 @@
 Certificate Package: config-server
-Generated: 2026-05-13 09:34 UTC
+Generated: 2026-05-29 16:48 UTC
 Valid for: 365 days
 CA: TranscendenceCA
 

@@ -1,5 +1,6 @@
 package com.ft_transcendence.auth.domain.model;
 
+import com.ft_transcendence.auth.domain.model.twofactor.UserTwoFactorMethod;
 import lombok.*;
 import jakarta.persistence.*;
 import org.springframework.data.annotation.CreatedDate;
@@ -67,8 +68,19 @@ public class UserAuth {
     @Column(name = "is_2fa_enabled")
     private boolean is2faEnabled = false;
 
-    @Column(name = "two_factor_secret")
-    private String twoFactorSecret;
+    @Builder.Default
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<UserTwoFactorMethod> twoFactorMethods = new ArrayList<>();
+
+    public void addTwoFactorMethod(UserTwoFactorMethod method) {
+        twoFactorMethods.add(method);
+        method.setUser(this);
+    }
+
+    public void removeTwoFactorMethod(UserTwoFactorMethod method) {
+        twoFactorMethods.remove(method);
+        method.setUser(null);
+    }
 
     // === OAuth ===
     @Builder.Default

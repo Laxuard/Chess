@@ -1,0 +1,13 @@
+# ==========================================
+#  Gateway Docker Configuration
+# ==========================================
+
+spring:
+  data:
+    redis:
+      host: redis
+          
+custom:
+  jwt:
+    public-key-location: file:/app/jwt/jwt_public.pem
+    private-key-location: file:/app/jwt/jwt_private_pkcs8.pem

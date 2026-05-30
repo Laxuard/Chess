@@ -34,7 +34,7 @@ public class TwoFactorController {
     @PostMapping("/verify")
     public ResponseEntity<MfaResponse> verifyLoginChallenge(
             @RequestBody MfaVerificationRequest request,
-            HttpSession session) {
-        return ResponseEntity.ok(twoFactorService.verifyLoginChallenge(request, session));
+            @AuthenticationPrincipal Jwt jwt) {
+        return ResponseEntity.ok(twoFactorService.verifyLoginChallenge(request, jwt));
     }
 }

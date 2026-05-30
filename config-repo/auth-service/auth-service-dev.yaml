@@ -2,9 +2,6 @@
 # AUTH SERVICE DEVELOPMENT OVERRIDES
 # ==========================================
 
-app:
-  error-docs-url: "https://localhost:8080/docs/errors#"  
-
 spring:
   datasource:
     url: jdbc:postgresql://localhost:${POSTGRES_PORT}/${DB_NAME}

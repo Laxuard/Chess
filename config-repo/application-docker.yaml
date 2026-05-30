@@ -2,17 +2,22 @@
 #  Application Docker Configuration
 # ==========================================
 
-server:
+spring:
   ssl:
-    trust-store: file:/app/truststore/truststore.p12
-    key-store: file:/app/services/${spring.application.name}/${spring.application.name}.p12
+    bundle:
+      jks:
+        microservice-bundle:
+          keystore:
+            location: "file:/app/services/${spring.application.name}/${spring.application.name}.p12"
+          truststore:
+            location: "file:/app/truststore/truststore.p12"
 
 eureka:
   instance:
     hostname: ${spring.application.name}
   client:
-    tls:
-      trust-store: file:/app/truststore/truststore.p12
-      key-store: file:/app/services/${spring.application.name}/${spring.application.name}.p12
     service-url:
       defaultZone: https://eureka-server:${EUREKA_PORT}/eureka/
+    tls:
+      key-store: "file:/app/services/${spring.application.name}/${spring.application.name}.p12"
+      trust-store: "file:/app/truststore/truststore.p12"

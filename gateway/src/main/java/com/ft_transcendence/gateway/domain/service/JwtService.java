@@ -35,26 +35,31 @@ public class JwtService {
         this.activeKid = jwk.computeThumbprint().toString();
     }
 
-    public String mint(String publicId, List<String> roles, String traceId) {
+    /**
+     * Mints a cryptographically signed Transit JWT payload.
+     * Includes the critical 'sid' pointer claim to enable downstream programmatic 2FA verification updates.
+     */
+    public String mint(String publicId, List<String> roles, String sessionId, String traceId) { // Added sessionId parameter
         Instant now = Instant.now();
 
         try {
-            // 3. Assemble the protected envelope header containing your dynamic thumbprint ID
+            // Assemble the protected envelope header containing your dynamic thumbprint ID
             JWSHeader header = new JWSHeader.Builder(JWSAlgorithm.RS256)
                     .keyID(this.activeKid)
                     .build();
 
-            // 4. Fill out the token contents safely
+            // Fill out the token contents safely
             JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
                     .subject(publicId)
                     .issuer("transcendence-gateway")
                     .issueTime(Date.from(now))
                     .expirationTime(Date.from(now.plusSeconds(60))) // Short-lived transit window
                     .claim("roles", roles)
+                    .claim("sid", sessionId)
                     .claim("tid", traceId)
                     .build();
 
-            // 5. Seal, cryptographically stamp, and compile into a string text block
+            // Seal, cryptographically stamp, and compile into a string text block
             SignedJWT signedJWT = new SignedJWT(header, claimsSet);
             signedJWT.sign(this.jwsSigner);
 

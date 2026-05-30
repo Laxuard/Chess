@@ -6,16 +6,6 @@ spring:
   data:
     redis:
       host: localhost
-  cloud:
-    gateway:
-      server:
-        webflux:
-      # == SSL Configuration for WebClient (Reactor Netty httpclient) ==
-          httpclient:
-            ssl:
-              key-store: "file:${CERT_DIR_PATH}/services/${spring.application.name}/${spring.application.name}.p12"
-              trusted-x509-certificates:
-                - "file:${CERT_DIR_PATH}/rootCA/rootCA.crt"
           
 custom:
   jwt:

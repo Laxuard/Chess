@@ -32,3 +32,9 @@ spring:
     redis:
       port: ${REDIS_PORT}
       password: "${REDIS_PASSWORD}"
+
+# ==========================================
+# OPENAPI / SWAGGER DOCUMENTATION CONFIGURATION
+# ==========================================
+springdoc:
+  server-url: "https://localhost:8080/api/auth"

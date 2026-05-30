@@ -13,5 +13,4 @@ public class RedisSessionSerializationConfig {
         return GenericJacksonJsonRedisSerializer.builder().build();
     }
 
-
 }

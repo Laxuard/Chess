@@ -24,21 +24,29 @@ banner() {
 
 # ── Globals ───────────────────────────────────────────────────────────────────
 LOG_DIR="logs"
-PID_DIR=".pids"          # flat files: .pids/<name>.pid  — survives subshells
-MAX_LOG_BYTES=$(( 20 * 1024 * 1024 ))   # rotate logs at 20 MB
+PID_DIR=".pids"
+MAX_LOG_BYTES=$(( 20 * 1024 * 1024 ))
 
-# Ordered startup list — populated in main(), read everywhere else
-SERVICES=()              # ordered names
-declare -A SVC_PORT      # name → port
-declare -A SVC_SCHEME    # name → http|https
-declare -A SVC_PROFILES  # name → maven profiles
+SERVICES=()
+declare -A SVC_PORT
+declare -A SVC_SCHEME
+declare -A SVC_PROFILES
 
-# ── PID file helpers (subshell-safe) ─────────────────────────────────────────
+# ── Shutdown state ─────────────────────────────────────────────────────────────
 #
-# Associative arrays don't propagate into subshells or background processes.
-# Writing PID files to disk means every function can read any service's PID
-# without caring whether it's in the same process tree.
+# SHUTTING_DOWN is the critical flag that breaks the restart loop.
+# Without it: cleanup kills a service → watcher sees dead PID → watcher
+# restarts it → cleanup kills it again → infinite loop.
 #
+# Written to a file so the watcher subshell can see it. An in-memory
+# variable won't work because the watcher is a separate process.
+#
+SHUTDOWN_FLAG="${PID_DIR}/.shutting_down"
+WATCHER_PID=""   # captured after watch_services &, so cleanup can kill it
+
+is_shutting_down() { [[ -f "$SHUTDOWN_FLAG" ]]; }
+
+# ── PID file helpers ──────────────────────────────────────────────────────────
 pid_file()  { echo "$PID_DIR/$1.pid"; }
 write_pid() { echo "$2" > "$(pid_file "$1")"; }
 read_pid()  { local f; f="$(pid_file "$1")"; [[ -f "$f" ]] && cat "$f" || echo ""; }
@@ -51,10 +59,6 @@ is_alive() {
 }
 
 # ── Log rotation ──────────────────────────────────────────────────────────────
-#
-# Rotate a log file if it exceeds MAX_LOG_BYTES.
-# Keeps one archive (.log.1) so nothing is lost.
-#
 maybe_rotate_log() {
     local log_file="$1"
     if [[ -f "$log_file" ]]; then
@@ -68,31 +72,56 @@ maybe_rotate_log() {
 }
 
 # ── Cleanup ───────────────────────────────────────────────────────────────────
+#
+# FIX: The original script trapped EXIT in addition to SIGINT/SIGTERM.
+# That caused cleanup to fire twice on Ctrl+C (once for SIGINT, once for
+# EXIT when the script exited), and also on any normal exit path.
+#
+# FIX: The shutdown flag is set *before* any kills so the watcher
+# subshell stops its restart loop immediately, instead of racing.
+#
+# FIX: The watcher's PID is explicitly killed here so it doesn't outlive
+# the main script and keep trying to restart dead services.
+#
+_CLEANED_UP=0
 cleanup() {
+    # Guard against double invocation (SIGINT can fire twice: once from the
+    # terminal, once when 'wait' returns with 130 and the script exits).
+    [[ "$_CLEANED_UP" -eq 1 ]] && return
+    _CLEANED_UP=1
+
     echo ""
     warn "Shutting down all services..."
+
+    # Signal the watcher to stop before it races to restart dying services
+    touch "$SHUTDOWN_FLAG"
+
+    # Kill the watcher first so it can't restart anything we're about to kill
+    if [[ -n "$WATCHER_PID" ]] && kill -0 "$WATCHER_PID" 2>/dev/null; then
+        kill -TERM "$WATCHER_PID" 2>/dev/null || true
+    fi
 
     for name in "${SERVICES[@]}"; do
         stop_service "$name" "quiet"
     done
 
-    # Fallback: kill any orphaned Maven/Spring processes from this project
-    pkill -f "com.ft_transcendence"                              2>/dev/null || true
-    pkill -f "spring-boot:run.*transcendence"                    2>/dev/null || true
-    pkill -f "classworlds.launcher.Launcher.*transcendence"      2>/dev/null || true
+    # Fallback for any orphaned Maven/Spring processes from this project.
+    # Using pkill's exit code is unreliable under set -e, so we suppress it.
+    pkill -f "com.ft_transcendence"                         2>/dev/null || true
+    pkill -f "spring-boot:run.*transcendence"               2>/dev/null || true
+    pkill -f "classworlds.launcher.Launcher.*transcendence" 2>/dev/null || true
 
     rm -rf "$PID_DIR"
     ok "All services stopped."
-    exit 0
 }
-trap cleanup SIGINT SIGTERM EXIT
+
+# Trap only real termination signals, not EXIT.
+# Trapping EXIT causes cleanup to run on every exit path (including
+# successful ones and the 'exit 0' inside cleanup itself), which
+# produces double-output and can re-kill already-dead processes.
+trap 'cleanup; exit 0' SIGINT SIGTERM
 
 # ── Infra readiness ───────────────────────────────────────────────────────────
-#
-# Checks that Docker infra (Redis, Postgres, RabbitMQ) is healthy
-# before starting any Java service. Avoids "connection refused" spam
-# in logs while services retry on startup.
-#
 check_infra() {
     step "Checking Infrastructure"
 
@@ -104,9 +133,7 @@ check_infra() {
         local status
         status=$(docker inspect -f '{{.State.Health.Status}}' "$container" 2>/dev/null || echo "missing")
         case "$status" in
-            healthy)
-                ok "$container is healthy"
-                ;;
+            healthy)  ok "$container is healthy" ;;
             missing)
                 error "$container is not running. Start infra first:"
                 error "  docker compose up -d"
@@ -150,8 +177,9 @@ wait_for_container() {
         local status
         status=$(docker inspect -f '{{.State.Health.Status}}' "$container" 2>/dev/null || echo "missing")
         [[ "$status" == "healthy" ]] && { ok "$container healthy"; return; }
-        sleep 3; elapsed=$(( elapsed + 3 ))
-        printf "\r  ${YLW}waiting${RST} for $container %ds / %ds ..." "$elapsed" "$timeout"
+        sleep 3
+        elapsed=$(( elapsed + 3 ))
+        printf "\r  ${YLW}waiting${RST} for %s %ds / %ds ..." "$container" "$elapsed" "$timeout"
         if (( elapsed >= timeout )); then
             echo ""
             error "Timeout waiting for $container"
@@ -173,13 +201,6 @@ mvn_cmd() {
 }
 
 # ── Health check ──────────────────────────────────────────────────────────────
-#
-# mTLS-aware: if the scheme is https, curl must present the service's own
-# client certificate (.pem = key+cert bundle) so that the server's
-# client-auth:need requirement is satisfied. We also pass --cacert with our
-# internal Root CA so curl actually verifies the server cert instead of
-# blindly skipping it with -k (which would hide cert issues).
-#
 wait_for_health() {
     local name="$1"
     local port="${SVC_PORT[$name]}"
@@ -189,7 +210,6 @@ wait_for_health() {
     local elapsed=0
     local url="${scheme}://localhost:${port}/actuator/health"
 
-    # Build curl args for mTLS: present our client cert + verify server against our CA
     local curl_args=(-sf -o /dev/null "$url")
     if [[ "$scheme" == "https" ]]; then
         local client_pem="certs/services/${name}/${name}.pem"
@@ -197,7 +217,6 @@ wait_for_health() {
         if [[ -f "$client_pem" && -f "$ca_crt" ]]; then
             curl_args=(--cert "$client_pem" --cacert "$ca_crt" "${curl_args[@]}")
         else
-            # Fallback: skip verification if certs aren't generated yet
             warn "[$name] cert not found — using -k (insecure) for health check"
             curl_args=(-k "${curl_args[@]}")
         fi
@@ -213,16 +232,13 @@ wait_for_health() {
         if (( elapsed >= timeout )); then
             echo ""
             error "[$name] health timeout after ${timeout}s"
-            error "Last 30 lines of ${LOG_DIR}/${name}.log:"
             tail -n 30 "${LOG_DIR}/${name}.log" >&2 || true
             return 1
         fi
 
-        # Bail early if the process already died
         if ! is_alive "$name"; then
             echo ""
             error "[$name] process died during startup"
-            error "Last 30 lines of ${LOG_DIR}/${name}.log:"
             tail -n 30 "${LOG_DIR}/${name}.log" >&2 || true
             return 1
         fi
@@ -246,7 +262,6 @@ start_service() {
         return 1
     fi
 
-    # Kill existing instance if running (selective restart path)
     if is_alive "$name"; then
         warn "[$name] already running — stopping first"
         stop_service "$name"
@@ -261,6 +276,12 @@ start_service() {
 
     dim "  Log → tail -f $log_file"
 
+    # FIX: 'exec' inside the subshell replaces the subshell with Maven,
+    # which means the subshell's PID *becomes* Maven's PID. We save
+    # that PID before exec so we can track and kill Maven directly.
+    # Previously, saving $! captured the subshell PID, but after exec
+    # that PID belongs to Maven — so this was accidentally correct, but
+    # only because exec replaces the process. Made explicit here for clarity.
     (
         cd "$name"
         export MAVEN_OPTS="-Dspring-boot.run.fork=false"
@@ -277,16 +298,20 @@ start_service() {
     if ! wait_for_health "$name"; then
         error "[$name] failed to start. Aborting."
         cleanup
+        exit 1
     fi
 }
 
 # ── Stop a single service ─────────────────────────────────────────────────────
 stop_service() {
     local name="$1"
-    local mode="${2:-verbose}"   # verbose | quiet
+    local mode="${2:-verbose}"
 
     local pid
     pid="$(read_pid "$name")"
+
+    # Clear the PID file immediately so the watcher can't race us
+    clear_pid "$name"
 
     if [[ -z "$pid" ]]; then
         [[ "$mode" == "verbose" ]] && warn "[$name] no PID on record"
@@ -295,15 +320,18 @@ stop_service() {
 
     if kill -0 "$pid" 2>/dev/null; then
         [[ "$mode" == "verbose" ]] && info "[$name] sending SIGTERM to PID $pid"
-        kill -TERM "$pid"
+        kill -TERM "$pid" 2>/dev/null || true
 
-        # Wait up to 15s for graceful shutdown (Eureka deregistration etc.)
         local waited=0
-        while kill -0 "$pid" 2>/dev/null && (( waited < 15 )); do
-            sleep 1; (( waited++ ))
+        while kill -0 "$pid" 2>/dev/null; do
+            sleep 1
+            # FIX: '(( waited++ ))' exits with code 1 when waited=0 under
+            # set -e because the expression evaluates to 0 (falsy).
+            # Use 'waited=$(( waited + 1 ))' instead — always exits 0.
+            waited=$(( waited + 1 ))
+            [[ "$waited" -ge 15 ]] && break
         done
 
-        # Force if still alive
         if kill -0 "$pid" 2>/dev/null; then
             warn "[$name] still alive after 15s — sending SIGKILL"
             kill -KILL "$pid" 2>/dev/null || true
@@ -311,8 +339,6 @@ stop_service() {
 
         [[ "$mode" == "verbose" ]] && ok "[$name] stopped"
     fi
-
-    clear_pid "$name"
 }
 
 # ── Selective restart ─────────────────────────────────────────────────────────
@@ -332,17 +358,25 @@ restart_service() {
     ok "$name restarted"
 }
 
-# ── Watcher (subshell-safe via PID files) ─────────────────────────────────────
+# ── Watcher ───────────────────────────────────────────────────────────────────
 #
-# Previous version used associative arrays in a background subshell — those
-# are empty in a subshell. This version reads PID files from disk instead,
-# so it actually sees every service.
+# FIX: The watcher now checks the shutdown flag before acting on a dead PID.
+# Without this check, the watcher races cleanup: as cleanup kills services,
+# the watcher sees dead PIDs and tries to restart them, fighting cleanup.
 #
 watch_services() {
     info "Watcher started (checks every 5s)"
     while true; do
         sleep 5
+
+        # Bail out entirely if shutdown has been requested
+        is_shutting_down && return
+
         for name in "${SERVICES[@]}"; do
+            # Check shutdown flag inside the loop too — cleanup could have
+            # started mid-iteration
+            is_shutting_down && return
+
             local pid
             pid="$(read_pid "$name")"
             [[ -z "$pid" ]] && continue
@@ -350,19 +384,17 @@ watch_services() {
             if ! kill -0 "$pid" 2>/dev/null; then
                 echo ""
                 error "[$name] crashed (PID $pid was expected alive)"
-                error "Last 30 lines of ${LOG_DIR}/${name}.log:"
                 tail -n 30 "${LOG_DIR}/${name}.log" >&2 || true
 
-                # Auto-restart instead of killing everything
                 warn "[$name] attempting auto-restart..."
-                start_service "$name" || {
+                if ! start_service "$name"; then
                     error "[$name] failed to restart — aborting cluster"
                     cleanup
-                }
+                    exit 1
+                fi
             fi
         done
 
-        # Also rotate any logs that got large while running
         for name in "${SERVICES[@]}"; do
             maybe_rotate_log "${LOG_DIR}/${name}.log"
         done
@@ -442,11 +474,7 @@ load_env() {
 }
 
 # ── Service registry ──────────────────────────────────────────────────────────
-#
-# Add new services here — nothing else needs to change.
-#
 register_services() {
-    # register_service <name> <port> <scheme> [maven-profiles]
     register_service "config-server" "$CONFIG_SERVER_PORT" "$CONFIG_SERVER_SCHEME" "native,dev"
     register_service "eureka-server" "$EUREKA_PORT"        "$EUREKA_SCHEME"        "dev"
     register_service "gateway"       "$GATEWAY_PORT"       "$GATEWAY_SCHEME"       "dev"
@@ -488,7 +516,6 @@ main() {
         start|"")
             check_infra
 
-            # Startup order matters — do not reorder
             for name in "${SERVICES[@]}"; do
                 start_service "$name"
             done
@@ -506,10 +533,16 @@ main() {
             info "In another terminal: $0 restart <service>"
             echo ""
 
-            # Watcher runs in background — reads PID files so subshell is fine
+            # Launch watcher and capture its PID so cleanup can kill it
             watch_services &
+            WATCHER_PID=$!
 
-            wait
+            # FIX: 'wait' returns 130 on SIGINT, causing the script to
+            # exit with a non-zero code, which would trigger the EXIT trap
+            # if we had one (and cause a double-cleanup). We suppress the
+            # non-zero exit from wait with '|| true', and let the SIGINT
+            # trap handle the actual cleanup.
+            wait || true
             ;;
 
         restart)
@@ -530,9 +563,8 @@ main() {
             if [[ -n "$target" ]]; then
                 tail -f "${LOG_DIR}/${target}.log"
             else
-                # tail all logs with headers if multitail not available
                 if command -v multitail &>/dev/null; then
-                    args=()
+                    local args=()
                     for name in "${SERVICES[@]}"; do
                         args+=("-l" "tail -f ${LOG_DIR}/${name}.log")
                     done

@@ -1,13 +1,14 @@
 package com.ft_transcendence.auth.domain.service;
 
+import com.ft_transcendence.auth.domain.dto.AuthStateResult;
+import com.ft_transcendence.auth.domain.model.*;
+import com.ft_transcendence.auth.domain.model.twofactor.TwoFactorMethodType;
+import com.ft_transcendence.auth.domain.model.twofactor.UserTwoFactorMethod;
 import com.ft_transcendence.auth.security.context.SecurityUser;
 import lombok.RequiredArgsConstructor;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.stereotype.Service;
-import com.ft_transcendence.auth.domain.model.UserAuth;
 import org.springframework.security.core.Authentication;
-import com.ft_transcendence.auth.domain.model.AuthProvider;
-import com.ft_transcendence.auth.domain.model.UserIdentity;
 import org.springframework.transaction.annotation.Transactional;
 import com.ft_transcendence.auth.domain.dto.request.LoginRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -17,6 +18,7 @@ import org.springframework.security.authentication.AuthenticationManager;
 import com.ft_transcendence.auth.core.exception.DuplicateResourceException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -46,6 +48,7 @@ public class AuthService {
                 .user(userAuth)
                 .provider(AuthProvider.LOCAL)
                 .providerId(request.email())
+                .lastLoginAt(LocalDateTime.now())
                 .build();
 
         userAuth.addIdentity(userIdentity);
@@ -59,7 +62,7 @@ public class AuthService {
     }
 
     @Transactional(readOnly = true)
-    public UserAuth login(LoginRequest request, HttpSession session) {
+    public AuthStateResult login(LoginRequest request, HttpSession session) {
         // Submit credentials to the authentication manager layer
         Authentication authenticationToken = new UsernamePasswordAuthenticationToken(request.login(), request.password());
         Authentication authResult = authenticationManager.authenticate(authenticationToken);
@@ -68,7 +71,16 @@ public class AuthService {
         UserAuth userAuth = securityUser.userAuth();
 
         syncSessionAttributes(userAuth, session);
-        return userAuth;
+        if (userAuth.is2faEnabled()) {
+            List<TwoFactorMethodType> methods = userAuth.getTwoFactorMethods().stream()
+                    .filter(UserTwoFactorMethod::isVerified)
+                    .map(UserTwoFactorMethod::getMethodType)
+                    .toList();
+
+            return new AuthStateResult("AWAITING_MFA", userAuth, methods);
+        }
+
+        return new AuthStateResult("AUTHENTICATED", userAuth, List.of());
     }
 
     private void syncSessionAttributes(UserAuth user, HttpSession session) {
@@ -76,8 +88,15 @@ public class AuthService {
                 .map(Enum::name)
                 .toList();
 
-        session.setAttribute("userId", user.getUserId());
         session.setAttribute("roles", roleStrings);
+        session.setAttribute("userId", user.getUserId());
+
+        if (user.is2faEnabled()) {
+            session.setAttribute("isFullyAuthenticated", false);
+        } else {
+            session.setAttribute("isFullyAuthenticated", true);
+        }
+
     }
 
 }

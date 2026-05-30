@@ -1,5 +1,6 @@
 package com.ft_transcendence.auth.domain.controller;
 
+import com.ft_transcendence.auth.domain.dto.AuthStateResult;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import jakarta.servlet.http.HttpSession;
@@ -38,9 +39,13 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request, HttpSession session) {
+        AuthStateResult stateResult = authService.login(request, session);
 
-        UserAuth loggedUser = authService.login(request, session);
-        AuthResponse response = userMapper.toRegisterResponse(loggedUser);
+        AuthResponse response = userMapper.toLoginResponse(stateResult);
+
+        if ("AWAITING_MFA".equals(stateResult.status())) {
+            return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
+        }
 
         return ResponseEntity.status(HttpStatus.OK).body(response);
     }

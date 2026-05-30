@@ -2,28 +2,21 @@
 # GLOBAL MICROSERVICE CONFIGURATION
 # ==========================================
 
-# == 1. Server & Security Configuration ==
-server:
-  ssl:
-    enabled: true
-    client-auth: need
-    key-store-type: PKCS12
-    trust-store-type: PKCS12
-    key-alias: "${spring.application.name}"
-    key-store-password: "${CERT_PASSWORD}"
-    trust-store-password: "${CERT_PASSWORD}"
-  error:
-    # 1. Kill the stack traces for security
-    include-stacktrace: never
-    # 2. Include the exception message
-    include-message: always
-    # 3. Include validation errors
-    include-binding-errors: always
-    # 4. Hide the specific exception class name
-    include-exception: false
-
-# == 2. Spring Core Configuration ==
+# == 1. Centralized Modern SSL Bundles ==
 spring:
+  ssl:
+    bundle:
+      jks:
+        microservice-bundle:
+          key:
+            alias: "${spring.application.name}"
+            password: "${CERT_PASSWORD}"
+          keystore:
+            password: "${CERT_PASSWORD}"
+            type: "PKCS12"
+          truststore:
+            password: "${CERT_PASSWORD}"
+            type: "PKCS12"
   mvc:
     problemdetails:
       enabled: true
@@ -31,7 +24,19 @@ spring:
     problemdetails:
       enabled: true
 
-# == 3. Eureka Discovery Configuration ==
+# == 2. Inbound Server Configuration (Uses Modern Bundle) ==
+server:
+  ssl:
+    enabled: true
+    client-auth: need
+    bundle: microservice-bundle # Tomcat/Netty use the bundle natively
+  error:
+    include-stacktrace: never
+    include-message: always
+    include-binding-errors: always
+    include-exception: false
+
+# == 3. Eureka Discovery Configuration (Hybrid Layer) ==
 eureka:
   instance:
     prefer-ip-address: false
@@ -42,11 +47,14 @@ eureka:
     register-with-eureka: true
     tls:
       enabled: true
+      # Old-school properties provided explicitly for legacy client/server registration stability
       key-password: "${CERT_PASSWORD}"
       key-store-password: "${CERT_PASSWORD}"
+      key-store-type: "PKCS12"
       trust-store-password: "${CERT_PASSWORD}"
+      trust-store-type: "PKCS12"
 
-# == 4. Observability & Actuator ==
+# == 4. Observability & Logging ==
 management:
   endpoints:
     web:
@@ -56,7 +64,15 @@ management:
     health:
       show-details: always
 
-# == 5. Logging Configuration ==
 logging:
   pattern:
-    console: "%d{HH:mm:ss} [%X{trace_id}] %-5level %logger{36} - %msg%n"
+    console: "%d{HH:mm:ss.SSS} %clr([%36X{trace_id}]){cyan} %clr(%-5level) %clr(%logger{36}){magenta} - %msg%n"
+  level:
+    # Prevent common, expected client input errors (like 400 Bad Request or 401 Unauthorized) 
+    # from dumping massive multi-page warning stacks into your console logs.
+    org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler: WARN
+    org.springframework.web.server.handler.ResponseStatusExceptionHandler: WARN
+
+# == 5. API Documentation ==
+app:
+  error-docs-url: "https://api.transcendence.com/errors/"

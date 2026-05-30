@@ -8,7 +8,7 @@ server:
     client-auth: none
 
 spring:
-# == Redis Session Management ==
+  # == Redis Session Management ==
   session:
     timeout: 7d
     data:
@@ -20,28 +20,68 @@ spring:
     redis:
       port: ${REDIS_PORT}
       password: ${REDIS_PASSWORD}
-# == WebClient Configuration for Inter-Service Communication ==
+
+  # == WebClient & Netty Routing Engine Client SSL Configuration ==
   cloud:
     gateway:
       server:
         webflux:
-        # == SSL Configuration for WebClient ==
           httpclient:
             wiretap: true
             ssl:
-              key-store-type: PKCS12
-              key-password: "${CERT_PASSWORD}"
-              key-store-password: "${CERT_PASSWORD}"
+              ssl-bundle: microservice-bundle
         # == Discovery Configuration ==
           discovery:
             locator:
               enabled: true
               lower-case-service-id: true
-        # == Route Configuration ==
+
           routes:
-            - id: auth-service
+            # OpenAPI Spec Bypass (High Priority)
+            - id: auth-service-openapi-bypass
               uri: lb://auth-service
+              order: 1
+              predicates:
+                - Path=/api/auth/v3/api-docs/**, /api/auth/v3/api-docs
+              filters:
+                - StripPrefix=2
+
+            # Public paths
+            - id: auth-service-public
+              uri: lb://auth-service
+              order: 2
+              predicates:
+                - Path=/api/auth/login, /api/auth/register
+              filters:
+                - StripPrefix=2
+
+            # Semi-Protected (2FA challenge)
+            - id: auth-service-2fa-verification
+              uri: lb://auth-service
+              order: 3
+              predicates:
+                - Path=/api/auth/2fa/verify
+              filters:
+                - StripPrefix=2
+                - SessionToJwt
+
+            # Secure Catch-All (Enforces Full Authentication)
+            - id: auth-service-secure-catchall
+              uri: lb://auth-service
+              order: 4
               predicates:
                 - Path=/api/auth/**
               filters:
                 - StripPrefix=2
+                - SessionToJwt
+                - TwoFactorCheck
+
+# ==========================================
+# OPENAPI / SWAGGER AGGREGATION CONFIGURATION
+# ==========================================
+springdoc:
+  swagger-ui:
+    use-root-path: false
+    urls:
+      - name: "Authentication Service"
+        url: "/api/auth/v3/api-docs"

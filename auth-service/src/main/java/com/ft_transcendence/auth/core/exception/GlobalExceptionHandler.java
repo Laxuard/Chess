@@ -1,10 +1,10 @@
 package com.ft_transcendence.auth.core.exception;
 
-import org.slf4j.MDC;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
 import jakarta.servlet.http.HttpServletRequest;
+import com.ft_transcendence.auth.core.util.TraceContext;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -26,6 +26,9 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @Value("${app.error-docs-url}")
     private String docBaseUrl;
+
+    @Value("${spring.application.name}")
+    private String serviceId;
 
     @Override
     protected ResponseEntity<Object> handleMethodArgumentNotValid(
@@ -116,13 +119,34 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .body(addMetadata(problem));
     }
 
+
+    /**
+     * Universal Interceptor Hook: Intercepts every built-in Spring MVC framework exception
+     * handled by ResponseEntityExceptionHandler (like HttpMessageNotReadableException)
+     * and guarantees it gets enriched with our trace, timestamp, and origin tracking data.
+     */
+    @Override
+    protected ResponseEntity<Object> handleExceptionInternal(
+            @NonNull Exception ex,
+            Object body,
+            @NonNull HttpHeaders headers,
+            @NonNull HttpStatusCode statusCode,
+            @NonNull WebRequest request) {
+
+        // If Spring Framework has initialized an RFC 7807 ProblemDetail body for this error, enrich it!
+        if (body instanceof ProblemDetail problem) {
+            addMetadata(problem);
+        }
+
+        // Forward to the parent execution chain to finalize network transmission
+        return super.handleExceptionInternal(ex, body, headers, statusCode, request);
+    }
+
     // ── Metadata ──────────────────────────────────────────────────────────
     private ProblemDetail addMetadata(ProblemDetail problem) {
-        String traceId = MDC.get("trace_id");
-        if (traceId == null) traceId = UUID.randomUUID().toString();
-
-        problem.setProperty("trace_id", traceId);
+        problem.setProperty("service_origin", serviceId);
         problem.setProperty("timestamp", Instant.now().toString());
+        problem.setProperty("trace_id", TraceContext.getTraceId(null));
         return problem;
     }
 
