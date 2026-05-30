@@ -3,7 +3,7 @@ package com.ft_transcendence.auth.domain.controller;
 import com.ft_transcendence.auth.domain.dto.AuthStateResult;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import jakarta.servlet.http.HttpSession;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import com.ft_transcendence.auth.domain.model.UserAuth;
@@ -29,17 +29,17 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request, HttpSession session) {
+    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request, HttpServletRequest servletRequest) {
 
-        UserAuth savedUser = authService.register(request, session);
+        UserAuth savedUser = authService.register(request, servletRequest);
         AuthResponse response = userMapper.toRegisterResponse(savedUser);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request, HttpSession session) {
-        AuthStateResult stateResult = authService.login(request, session);
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest servletRequest) {
+        AuthStateResult stateResult = authService.login(request, servletRequest);
 
         AuthResponse response = userMapper.toLoginResponse(stateResult);
 

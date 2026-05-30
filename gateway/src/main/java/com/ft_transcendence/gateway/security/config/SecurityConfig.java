@@ -1,15 +1,23 @@
 package com.ft_transcendence.gateway.security.config;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
-import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
+import com.ft_transcendence.gateway.security.oauth2.CustomOAuth2SuccessHandler;
+import com.ft_transcendence.gateway.security.oauth2.InMemoryOAuth2AuthorizationRequestRepository;
+import org.springframework.security.web.server.context.NoOpServerSecurityContextRepository;
 import org.springframework.security.web.server.savedrequest.NoOpServerRequestCache;
+import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 
 @Configuration
 @EnableWebFluxSecurity
+@RequiredArgsConstructor
 public class SecurityConfig {
+
+    private final CustomOAuth2SuccessHandler customOAuth2SuccessHandler;
+    private final InMemoryOAuth2AuthorizationRequestRepository ramAuthorizationRepository;
 
     @Bean
     public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http)
@@ -17,11 +25,19 @@ public class SecurityConfig {
         return http
 
                 .authorizeExchange(exchanges -> exchanges
+                        .pathMatchers("/login/**", "/oauth2/**").permitAll()
                         .anyExchange().permitAll()
                 )
 
+                .securityContextRepository(NoOpServerSecurityContextRepository.getInstance())
+
                 .requestCache(cache -> cache
                         .requestCache(NoOpServerRequestCache.getInstance()))
+
+                .oauth2Login(oauth2 -> oauth2
+                        .authorizationRequestRepository(ramAuthorizationRepository)
+                        .authenticationSuccessHandler(customOAuth2SuccessHandler)
+                )
 
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .logout(ServerHttpSecurity.LogoutSpec::disable)

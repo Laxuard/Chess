@@ -32,7 +32,7 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
 
-                        .requestMatchers("/login", "/register", "/actuator/health/**", "/v3/api-docs/**").permitAll()
+                        .requestMatchers("/login", "/register", "/actuator/health/**", "/v3/api-docs/**", "/oauth2/sync").permitAll()
 
                         // The "Closed" Doors (Requires the Gateway's JWT)
                         .anyRequest().authenticated()

@@ -1,7 +1,6 @@
 package com.ft_transcendence.auth.domain.controller;
 
 import com.ft_transcendence.auth.domain.dto.response.MfaResponse;
-import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.jwt.Jwt;

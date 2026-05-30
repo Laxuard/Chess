@@ -30,7 +30,7 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
 
     @Transactional
-    public UserAuth register(RegisterRequest request, HttpSession session) {
+    public UserAuth register(RegisterRequest request, jakarta.servlet.http.HttpServletRequest servletRequest) {
         if (userAuthRepository.existsByEmail(request.email())) {
             throw new DuplicateResourceException("Email already exists");
         }
@@ -54,6 +54,7 @@ public class AuthService {
         userAuth.addIdentity(userIdentity);
         UserAuth savedUser = userAuthRepository.save(userAuth);
 
+        HttpSession session = servletRequest.getSession(true);
         syncSessionAttributes(savedUser, session);
 
         // broadcast later before finishing.
@@ -62,7 +63,7 @@ public class AuthService {
     }
 
     @Transactional(readOnly = true)
-    public AuthStateResult login(LoginRequest request, HttpSession session) {
+    public AuthStateResult login(LoginRequest request, jakarta.servlet.http.HttpServletRequest servletRequest) {
         // Submit credentials to the authentication manager layer
         Authentication authenticationToken = new UsernamePasswordAuthenticationToken(request.login(), request.password());
         Authentication authResult = authenticationManager.authenticate(authenticationToken);
@@ -70,6 +71,7 @@ public class AuthService {
         SecurityUser securityUser = (SecurityUser) authResult.getPrincipal();
         UserAuth userAuth = securityUser.userAuth();
 
+        HttpSession session = servletRequest.getSession(true);
         syncSessionAttributes(userAuth, session);
         if (userAuth.is2faEnabled()) {
             List<TwoFactorMethodType> methods = userAuth.getTwoFactorMethods().stream()
