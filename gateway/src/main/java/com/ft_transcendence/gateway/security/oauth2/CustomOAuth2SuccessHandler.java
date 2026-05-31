@@ -56,10 +56,10 @@ public class CustomOAuth2SuccessHandler implements ServerAuthenticationSuccessHa
 
                     log.info("OAuth Session registration completed for User ID [{}]", userSummary.userId());
 
-                    // 4. Force frontend client redirection
+                    // 4. Force frontend client redirection to React Dev Server Dashboard
                     return redirectStrategy.sendRedirect(
                             webFilterExchange.getExchange(),
-                            URI.create("https://localhost:8080/")
+                            URI.create("http://localhost:5173/dashboard")
                     );
                 }));
     }

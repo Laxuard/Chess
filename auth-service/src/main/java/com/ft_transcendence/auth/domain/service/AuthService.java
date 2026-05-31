@@ -20,6 +20,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -99,6 +100,12 @@ public class AuthService {
             session.setAttribute("isFullyAuthenticated", true);
         }
 
+    }
+
+    @Transactional(readOnly = true)
+    public UserAuth getUserDetails(UUID userId) {
+        return userAuthRepository.findByUserId(userId)
+                .orElseThrow(() -> new com.ft_transcendence.auth.core.exception.ResourceNotFoundException("User not found with ID: " + userId));
     }
 
 }

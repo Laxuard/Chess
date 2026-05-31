@@ -51,17 +51,15 @@ public class AuthController {
     }
 
     @GetMapping("/users")
-// Secure method validation: Only users with the 'USER' role claim can execute this code!
     @PreAuthorize("hasAuthority('SCOPE_USER') or hasRole('USER')")
-    public ResponseEntity<String> getProfile(@AuthenticationPrincipal Jwt jwt) {
+    public ResponseEntity<com.ft_transcendence.auth.domain.dto.response.UserProfileResponse> getProfile(@AuthenticationPrincipal Jwt jwt) {
+        String userIdStr = jwt.getSubject();
+        java.util.UUID userId = java.util.UUID.fromString(userIdStr);
 
-        // Extract the unique subject ID parsed from the Gateway token
-        String userId = jwt.getSubject();
+        UserAuth userDetails = authService.getUserDetails(userId);
+        com.ft_transcendence.auth.domain.dto.response.UserProfileResponse response = userMapper.toProfileResponse(userDetails);
 
-        // Extract any custom claims you added during the minting step
-        String traceId = jwt.getClaimAsString("tid");
-
-        return ResponseEntity.ok("Welcome back user: " + userId + " [Trace: " + traceId + "]");
+        return ResponseEntity.ok(response);
     }
 
 }

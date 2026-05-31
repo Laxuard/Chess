@@ -1,0 +1,466 @@
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import Logo from '../components/Logo';
+import { useAuth } from '../context/AuthContext';
+import { getUsers, getMfaSetup, confirmMfaSetup } from '../services/api';
+import { QRCodeSVG } from 'qrcode.react';
+
+export default function DashboardScreen() {
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+
+  const [activeTab, setActiveTab] = useState('profile');
+  const [loading, setLoading] = useState(false);
+  const [usersResponse, setUsersResponse] = useState('');
+  const [profile, setProfile] = useState(null);
+  
+  // 2FA Setup state
+  const [mfaSecret, setMfaSecret] = useState('');
+  const [mfaQrUrl, setMfaQrUrl] = useState('');
+  const [confirmCode, setConfirmCode] = useState('');
+  const [mfaSuccess, setMfaSuccess] = useState(false);
+  const [mfaError, setMfaError] = useState('');
+
+  // Validate session on dashboard load and populate profile context
+  useEffect(() => {
+    async function verifyAccess() {
+      const { status, data } = await getUsers();
+      if (status === 401) {
+        logout();
+      } else if (status === 403) {
+        navigate('/mfa-challenge');
+      } else if (status === 200) {
+        setProfile(data);
+      }
+    }
+    verifyAccess();
+  }, [logout, navigate]);
+
+  const handleTestApi = async () => {
+    setLoading(true);
+    setUsersResponse('');
+    try {
+      const { status, data } = await getUsers();
+      if (status === 200) {
+        if (typeof data === 'string') {
+          setUsersResponse(data);
+        } else {
+          setUsersResponse(JSON.stringify(data, null, 2));
+        }
+      } else {
+        setUsersResponse(`[Error] Gateway rejected request. Status: ${status}`);
+      }
+    } catch (err) {
+      setUsersResponse('[Error] Cannot contact BFF Gateway proxy.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleInitiateMfa = async () => {
+    setMfaError('');
+    setMfaSuccess(false);
+    try {
+      const { status, data } = await getMfaSetup();
+      if (status === 200) {
+        setMfaSecret(data.setupDetails.secretKey);
+        setMfaQrUrl(data.setupDetails.qrCodeUrl);
+      } else {
+        setMfaError('Failed to initiate Multi-Factor setup.');
+      }
+    } catch (err) {
+      setMfaError('Error communicating with Auth-Service.');
+    }
+  };
+
+  const handleConfirmMfa = async (e) => {
+    e.preventDefault();
+    if (confirmCode.length !== 6) {
+      setMfaError('Enter a valid 6-digit confirmation code.');
+      return;
+    }
+
+    setMfaError('');
+    try {
+      const { status, data } = await confirmMfaSetup(confirmCode);
+      if (status === 200) {
+        setMfaSuccess(true);
+        setMfaSecret('');
+        setMfaQrUrl('');
+        setConfirmCode('');
+      } else {
+        setMfaError(data.message || 'MFA validation failed. Check your secret.');
+      }
+    } catch (err) {
+      setMfaError('Network error confirming setup.');
+    }
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', background: 'var(--bg-void)', color: 'var(--text-primary)', display: 'flex', flexDirection: 'column' }}>
+      
+      {/* ─── Global Navbar ──────────────────────── */}
+      <header style={{ background: 'var(--bg-base)', borderBottom: '1px solid var(--border-subtle)', padding: '16px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative' }}>
+        <Logo size="sm" />
+        <div style={{ display: 'flex', gap: '16px' }}>
+          <button className="btn btn-ghost btn-sm" onClick={logout}>
+            Sign Out
+          </button>
+        </div>
+      </header>
+
+      {/* ─── Main Content ────────────────────────── */}
+      <main style={{ flex: 1, padding: '40px 32px', maxWidth: '1200px', width: '100%', margin: '0 auto', display: 'grid', gridTemplateColumns: '240px 1fr', gap: '40px' }}>
+        
+        {/* Sidebar Nav */}
+        <aside className="stack stack-3">
+          <button 
+            className={`btn btn-full ${activeTab === 'profile' ? 'btn-primary' : 'btn-ghost'}`} 
+            onClick={() => setActiveTab('profile')}
+            style={{ textAlign: 'left', justifyContent: 'flex-start' }}
+          >
+            ◉ Operator Profile
+          </button>
+          <button 
+            className={`btn btn-full ${activeTab === 'mfa' ? 'btn-primary' : 'btn-ghost'}`} 
+            onClick={() => setActiveTab('mfa')}
+            style={{ textAlign: 'left', justifyContent: 'flex-start' }}
+          >
+            🔒 Multi-Factor Setup
+          </button>
+          <button 
+            className={`btn btn-full ${activeTab === 'api' ? 'btn-primary' : 'btn-ghost'}`} 
+            onClick={() => setActiveTab('api')}
+            style={{ textAlign: 'left', justifyContent: 'flex-start' }}
+          >
+            ⚡ Test Transit JWTs
+          </button>
+        </aside>
+
+        {/* Tab content panel */}
+        <section className="card" style={{ padding: '32px', minHeight: '400px' }}>
+            {/* Profile Tab */}
+          {activeTab === 'profile' && (
+            <div className="stack stack-6">
+              <div>
+                <span className="badge badge--online" style={{ marginBottom: '8px' }}>
+                  <span className="badge__dot" />Edge Active
+                </span>
+                <h2 className="text-display" style={{ fontSize: '1.75rem', marginBottom: '8px' }}>
+                  Identity Topology Map
+                </h2>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                  Real-time database visualization of your security context, credential roots, and active MFA gates.
+                </p>
+              </div>
+
+              {!profile ? (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
+                  <span className="text-mono">Synchronizing Identity Graph...</span>
+                </div>
+              ) : (
+                <div className="stack stack-6">
+                  {/* Visual Topology Diagram */}
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '24px',
+                    background: 'rgba(255,255,255,0.01)',
+                    padding: '32px 16px',
+                    borderRadius: '12px',
+                    border: '1px solid var(--border-subtle)',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}>
+                    {/* Glowing background decor */}
+                    <div style={{
+                      position: 'absolute',
+                      top: '50%',
+                      left: '50%',
+                      transform: 'translate(-50%, -50%)',
+                      width: '300px',
+                      height: '300px',
+                      background: 'radial-gradient(circle, rgba(0,240,200,0.03) 0%, transparent 70%)',
+                      pointerEvents: 'none',
+                      zIndex: 0
+                    }} />
+
+                    {/* Layer 1: Identity Providers (Linked Sources) */}
+                    <div style={{ display: 'flex', gap: '20px', zIndex: 1, width: '100%', justifyContent: 'center' }}>
+                      {profile.identities && profile.identities.length > 0 ? (
+                        profile.identities.map((ident, idx) => (
+                          <div key={idx} style={{
+                            background: 'var(--bg-overlay)',
+                            border: '1px solid var(--teal-glow)',
+                            borderRadius: '8px',
+                            padding: '16px 20px',
+                            textAlign: 'center',
+                            minWidth: '180px',
+                            boxShadow: '0 0 15px rgba(0, 240, 200, 0.05)'
+                          }}>
+                            <span className="text-label" style={{ color: 'var(--teal-glow)', display: 'block', fontSize: '0.75rem', marginBottom: '8px' }}>
+                              AUTHENTICATION SOURCE
+                            </span>
+                            <span className="text-display" style={{ fontSize: '1.2rem', display: 'block', marginBottom: '4px' }}>
+                              {ident.provider}
+                            </span>
+                            <span className="text-mono" style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                              ID: {ident.providerId.length > 20 ? ident.providerId.slice(0, 20) + '...' : ident.providerId}
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{
+                          background: 'var(--bg-overlay)',
+                          border: '1px solid var(--border-subtle)',
+                          borderRadius: '8px',
+                          padding: '16px 20px',
+                          textAlign: 'center',
+                          minWidth: '180px'
+                        }}>
+                          <span className="text-label" style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.75rem', marginBottom: '8px' }}>
+                            IDENTITY SOURCE
+                          </span>
+                          <span className="text-display" style={{ fontSize: '1.2rem', display: 'block', color: 'var(--text-secondary)' }}>
+                            LOCAL CREDENTIALS
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Connector Arrow */}
+                    <div style={{ color: 'var(--teal-glow)', fontSize: '1.5rem', fontWeight: 'bold', zIndex: 1, userSelect: 'none' }}>
+                      ↓
+                    </div>
+
+                    {/* Layer 2: Central Identity Core */}
+                    <div style={{
+                      background: 'var(--bg-raised)',
+                      border: '1.5px solid var(--teal-glow)',
+                      borderRadius: '10px',
+                      padding: '24px',
+                      width: '100%',
+                      maxWidth: '480px',
+                      zIndex: 1,
+                      position: 'relative',
+                      boxShadow: '0 0 25px rgba(0, 240, 200, 0.08)'
+                    }}>
+                      <div style={{ position: 'absolute', top: '12px', right: '12px' }}>
+                        <span className="badge badge--online"><span className="badge__dot" />CORE</span>
+                      </div>
+                      <span className="text-label" style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', display: 'block', marginBottom: '4px' }}>
+                        CENTRAL USER IDENTITY
+                      </span>
+                      <h3 className="text-display" style={{ fontSize: '1.5rem', marginBottom: '4px', color: '#fff' }}>
+                        {profile.username}
+                      </h3>
+                      <span className="text-mono" style={{ fontSize: '0.85rem', color: 'var(--teal-glow)', display: 'block', marginBottom: '16px' }}>
+                        {profile.email}
+                      </span>
+                      
+                      <div className="divider" style={{ margin: '12px 0' }}><span className="divider__line" /></div>
+                      
+                      <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '8px 16px', fontSize: '0.8rem' }}>
+                        <span className="text-label">USER UUID</span>
+                        <span className="text-mono" style={{ color: 'var(--text-secondary)', overflowWrap: 'anywhere' }}>{profile.userId}</span>
+                        
+                        <span className="text-label">ROLES</span>
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                          {profile.roles && profile.roles.map((role, idx) => (
+                            <span key={idx} className="badge badge--online" style={{ background: 'rgba(0, 240, 200, 0.1)', border: '1px solid var(--teal-glow)', padding: '2px 8px', fontSize: '0.7rem' }}>
+                              {role}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Connector Arrow */}
+                    <div style={{ color: 'var(--teal-glow)', fontSize: '1.5rem', fontWeight: 'bold', zIndex: 1, userSelect: 'none' }}>
+                      ↓
+                    </div>
+
+                    {/* Layer 3: Multi-Factor Authentication Shield */}
+                    <div style={{
+                      background: 'var(--bg-overlay)',
+                      border: profile.is2faEnabled ? '1.5px solid var(--teal-glow)' : '1px solid var(--border-subtle)',
+                      borderRadius: '8px',
+                      padding: '16px 24px',
+                      width: '100%',
+                      maxWidth: '360px',
+                      zIndex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '16px',
+                      boxShadow: profile.is2faEnabled ? '0 0 20px rgba(0, 240, 200, 0.06)' : 'none'
+                    }}>
+                      <div style={{
+                        width: '44px',
+                        height: '44px',
+                        borderRadius: '50%',
+                        background: profile.is2faEnabled ? 'rgba(0, 240, 200, 0.1)' : 'rgba(255, 255, 255, 0.02)',
+                        border: profile.is2faEnabled ? '1.5px solid var(--teal-glow)' : '1px solid var(--border-subtle)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '1.3rem'
+                      }}>
+                        {profile.is2faEnabled ? '🛡️' : '🔓'}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <span className="text-label" style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', display: 'block', marginBottom: '2px' }}>
+                          STEP-UP SECURITY SHIELD
+                        </span>
+                        <h4 className="text-display" style={{ fontSize: '1rem', color: profile.is2faEnabled ? 'var(--teal-glow)' : 'var(--text-secondary)' }}>
+                          {profile.is2faEnabled ? 'MFA FULLY ENFORCED' : 'NO MFA SHIELD BIND'}
+                        </h4>
+                        {profile.twoFactorMethods && profile.twoFactorMethods.length > 0 && (
+                          <span className="text-mono" style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>
+                            Active Methods: {profile.twoFactorMethods.map(m => m.methodType).join(', ')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Network Infrastructure Meta */}
+                  <div className="divider"><span className="divider__line" /></div>
+
+                  <div className="stack stack-4">
+                    <h3 className="text-display" style={{ fontSize: '1rem', color: 'var(--text-secondary)' }}>
+                      EDGE NETWORK METADATA
+                    </h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: '12px 16px', background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                      <span className="text-label">Active Cookie Domain</span>
+                      <span className="text-mono" style={{ color: 'var(--teal-glow)', fontSize: '0.85rem' }}>https://localhost:8080</span>
+
+                      <span className="text-label">Encryption Level</span>
+                      <span className="text-mono" style={{ fontSize: '0.85rem' }}>Lightweight Transit State Representation (JWT)</span>
+
+                      <span className="text-label">SameSite Cookie Policy</span>
+                      <span className="text-mono" style={{ fontSize: '0.85rem' }}>Lax (Secure HttpOnly Session Propagation)</span>
+
+                      <span className="text-label">Downstream Sync</span>
+                      <span className="text-mono" style={{ color: 'var(--teal-glow)', fontSize: '0.85rem' }}>mTLS Signed RSA-256 Downstream Handshake</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* MFA Tab */}
+          {activeTab === 'mfa' && (
+            <div className="stack stack-6">
+              <div>
+                <h2 className="text-display" style={{ fontSize: '1.75rem', marginBottom: '8px' }}>
+                  Multi-Factor Authentication (TOTP)
+                </h2>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                  Add a second verification layer to secure access logs and block unauthorized proxy sessions.
+                </p>
+              </div>
+
+              {mfaSuccess && (
+                <div className="alert alert--success">
+                  Multi-Factor Authentication enabled successfully!
+                </div>
+              )}
+
+              {mfaError && (
+                <div className="alert alert--error">
+                  {mfaError}
+                </div>
+              )}
+
+              {!mfaSecret ? (
+                <button className="btn btn-primary" onClick={handleInitiateMfa}>
+                  Initialize MFA Setup
+                </button>
+              ) : (
+                <div className="stack stack-6" style={{ background: 'rgba(255,255,255,0.01)', padding: '24px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                  <div>
+                    <h3 className="text-display" style={{ fontSize: '1.1rem', marginBottom: '8px', color: 'var(--teal-glow)' }}>
+                      Step 1: Scan Authenticator Token
+                    </h3>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '16px' }}>
+                      Scan the QR parameter link using Google Authenticator, or manually key in the secure secret.
+                    </p>
+                    <div style={{ display: 'flex', justifyContent: 'center', margin: '20px 0' }}>
+                      <div style={{ padding: '16px', background: 'var(--bg-overlay)', borderRadius: '8px', border: '1px solid var(--border-subtle)', display: 'inline-block' }}>
+                        <QRCodeSVG value={mfaQrUrl} size={160} bgColor="transparent" fgColor="#00f0c8" level="M" includeMargin={false} />
+                      </div>
+                    </div>
+                    <div style={{ background: 'var(--bg-overlay)', padding: '12px', borderRadius: '6px', overflowX: 'auto', border: '1px solid var(--border-subtle)' }}>
+                      <span className="text-label" style={{ display: 'block', marginBottom: '4px' }}>MANUAL KEY</span>
+                      <span className="text-mono" style={{ fontSize: '1.2rem', color: 'var(--teal-glow)' }}>{mfaSecret}</span>
+                    </div>
+                    <div style={{ marginTop: '12px', background: 'var(--bg-overlay)', padding: '12px', borderRadius: '6px', overflowX: 'auto', border: '1px solid var(--border-subtle)' }}>
+                      <span className="text-label" style={{ display: 'block', marginBottom: '4px' }}>QR URL</span>
+                      <span className="text-mono" style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{mfaQrUrl}</span>
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleConfirmMfa} className="stack stack-4">
+                    <h3 className="text-display" style={{ fontSize: '1.1rem', color: 'var(--teal-glow)' }}>
+                      Step 2: Confirm Verification Code
+                    </h3>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="confirmCode">6-Digit Code</label>
+                      <input
+                        id="confirmCode"
+                        type="text"
+                        className="form-input"
+                        placeholder="000000"
+                        value={confirmCode}
+                        onChange={(e) => setConfirmCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      />
+                    </div>
+                    <div className="row gap-3">
+                      <button type="submit" className="btn btn-primary">
+                        Lock 2FA To Profile
+                      </button>
+                      <button type="button" className="btn btn-ghost" onClick={() => setMfaSecret('')}>
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Test Transit JWT Tab */}
+          {activeTab === 'api' && (
+            <div className="stack stack-6">
+              <div>
+                <h2 className="text-display" style={{ fontSize: '1.75rem', marginBottom: '8px' }}>
+                  Transit JWT & Security Context Verification
+                </h2>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                  Test how the Gateway extracts your stateful session cookie, constructs a signed transit JWT, and passes it securely to downstream services.
+                </p>
+              </div>
+
+              <div className="row gap-4">
+                <button className="btn btn-primary" onClick={handleTestApi} disabled={loading}>
+                  {loading ? 'Interrogating Gateway...' : 'Interrogate /api/auth/users'}
+                </button>
+              </div>
+
+              {usersResponse && (
+                <div style={{ background: 'var(--bg-overlay)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '20px', position: 'relative' }}>
+                  <span className="text-label" style={{ position: 'absolute', top: '12px', right: '12px', color: 'var(--teal-glow)' }}>DECISION RESPONSE</span>
+                  <pre style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: '0.82rem', overflowX: 'auto', color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>
+                    {usersResponse}
+                  </pre>
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      </main>
+    </div>
+  );
+}
