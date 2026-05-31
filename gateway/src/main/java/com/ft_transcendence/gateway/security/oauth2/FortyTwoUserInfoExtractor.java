@@ -8,8 +8,8 @@ import java.util.Objects;
 @Component
 public class FortyTwoUserInfoExtractor implements OAuth2UserInfoExtractor {
     @Override
-    public boolean supports(String registrationId) {
-        return "fortytwo".equalsIgnoreCase(registrationId);
+    public String getRegistrationId() {
+        return "fortytwo";
     }
 
     @Override

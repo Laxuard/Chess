@@ -1,28 +1,36 @@
 package com.ft_transcendence.gateway.security.oauth2;
 
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.function.Function;
 
 @Component
-@RequiredArgsConstructor
 public class OAuth2UserInfoCompositeExtractor {
 
-    private final List<OAuth2UserInfoExtractor> extractors;
+    private final Map<String, OAuth2UserInfoExtractor> extractors;
+
+    public OAuth2UserInfoCompositeExtractor(List<OAuth2UserInfoExtractor> extractorList) {
+        this.extractors = extractorList.stream().collect(Collectors.toMap(
+                extractor -> extractor.getRegistrationId().toLowerCase(),
+                Function.identity()
+        ));
+    }
 
     public OAuth2SyncPayload extract(String registrationId, OAuth2User oAuth2User) {
-        return extractors.stream()
-                .filter(extractor -> extractor.supports(registrationId))
-                .findFirst()
-                .map(extractor -> new OAuth2SyncPayload(
-                        registrationId.toUpperCase(),
-                        extractor.getProviderId(oAuth2User),
-                        extractor.getEmail(oAuth2User),
-                        extractor.getName(oAuth2User)
-                ))
-                .orElseThrow(() -> new IllegalArgumentException("Unsupported OAuth2 provider: " + registrationId));
+        OAuth2UserInfoExtractor extractor = extractors.get(registrationId.toLowerCase());
+        if (extractor == null) {
+            throw new IllegalArgumentException("Unsupported OAuth2 provider: " + registrationId);
+        }
+        return new OAuth2SyncPayload(
+                registrationId.toUpperCase(),
+                extractor.getProviderId(oAuth2User),
+                extractor.getEmail(oAuth2User),
+                extractor.getName(oAuth2User)
+        );
     }
 
     public record OAuth2SyncPayload(String provider, String providerId, String email, String name) {}

@@ -1,23 +1,23 @@
 package com.ft_transcendence.auth.domain.controller;
 
-import com.ft_transcendence.auth.domain.dto.AuthStateResult;
-import com.ft_transcendence.auth.domain.dto.request.LoginRequest;
-import com.ft_transcendence.auth.domain.dto.request.RegisterRequest;
-import com.ft_transcendence.auth.domain.dto.response.AuthResponse;
-import com.ft_transcendence.auth.domain.dto.response.UserProfileResponse;
-import com.ft_transcendence.auth.domain.mapper.UserMapper;
-import com.ft_transcendence.auth.domain.model.UserAuth;
-import com.ft_transcendence.auth.domain.service.AuthService;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import jakarta.servlet.http.HttpSession;
 import org.springframework.http.HttpStatus;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.oauth2.jwt.Jwt;
+import com.ft_transcendence.auth.domain.model.UserAuth;
+import com.ft_transcendence.auth.domain.mapper.UserMapper;
+import com.ft_transcendence.auth.domain.service.AuthService;
+import com.ft_transcendence.auth.domain.dto.AuthStateResult;
+import org.springframework.security.access.prepost.PreAuthorize;
+import com.ft_transcendence.auth.domain.dto.request.LoginRequest;
+import com.ft_transcendence.auth.domain.dto.response.AuthResponse;
+import com.ft_transcendence.auth.domain.dto.request.RegisterRequest;
+import com.ft_transcendence.auth.domain.dto.response.UserProfileResponse;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 import java.util.List;
 import java.util.UUID;

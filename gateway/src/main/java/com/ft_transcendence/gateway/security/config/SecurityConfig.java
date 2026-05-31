@@ -6,7 +6,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import com.ft_transcendence.gateway.security.oauth2.CustomOAuth2SuccessHandler;
-import com.ft_transcendence.gateway.security.oauth2.InMemoryOAuth2AuthorizationRequestRepository;
+import com.ft_transcendence.gateway.security.oauth2.RedisServerOAuth2AuthorizationRequestRepository;
 import org.springframework.security.web.server.context.NoOpServerSecurityContextRepository;
 import org.springframework.security.web.server.savedrequest.NoOpServerRequestCache;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
@@ -20,7 +20,7 @@ import org.springframework.web.cors.CorsConfiguration;
 public class SecurityConfig {
 
     private final CustomOAuth2SuccessHandler customOAuth2SuccessHandler;
-    private final InMemoryOAuth2AuthorizationRequestRepository ramAuthorizationRepository;
+    private final RedisServerOAuth2AuthorizationRequestRepository redisAuthorizationRepository;
 
     @org.springframework.beans.factory.annotation.Value("${app.cors.allowed-origins:http://localhost:5173}")
     private java.util.List<String> allowedOrigins;
@@ -43,7 +43,7 @@ public class SecurityConfig {
                         .requestCache(NoOpServerRequestCache.getInstance()))
 
                 .oauth2Login(oauth2 -> oauth2
-                        .authorizationRequestRepository(ramAuthorizationRepository)
+                        .authorizationRequestRepository(redisAuthorizationRepository)
                         .authenticationSuccessHandler(customOAuth2SuccessHandler)
                 )
 

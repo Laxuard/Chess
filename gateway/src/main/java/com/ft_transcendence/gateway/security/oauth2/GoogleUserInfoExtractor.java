@@ -6,8 +6,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class GoogleUserInfoExtractor implements OAuth2UserInfoExtractor {
     @Override
-    public boolean supports(String registrationId) {
-        return "google".equalsIgnoreCase(registrationId);
+    public String getRegistrationId() {
+        return "google";
     }
 
     @Override

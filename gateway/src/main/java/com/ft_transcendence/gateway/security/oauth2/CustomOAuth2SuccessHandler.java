@@ -1,9 +1,13 @@
 package com.ft_transcendence.gateway.security.oauth2;
 
 import com.ft_transcendence.gateway.security.oauth2.OAuth2UserInfoCompositeExtractor.OAuth2SyncPayload;
+import com.ft_transcendence.gateway.domain.service.JwtService;
+import com.ft_transcendence.gateway.core.util.ReactiveTraceContext;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NullMarked;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
@@ -13,6 +17,9 @@ import org.springframework.security.web.server.WebFilterExchange;
 import org.springframework.security.web.server.authentication.ServerAuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+import org.springframework.web.server.WebSession;
+import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.net.URI;
@@ -23,9 +30,12 @@ import java.util.List;
 @RequiredArgsConstructor
 public class CustomOAuth2SuccessHandler implements ServerAuthenticationSuccessHandler {
 
+    private final JwtService jwtService;
     private final WebClient.Builder webClientBuilder;
     private final OAuth2UserInfoCompositeExtractor extractorFactory;
-    private final com.ft_transcendence.gateway.domain.service.JwtService jwtService;
+
+    @Value("${app.frontend.base-url:http://localhost:5173}")
+    private String frontendBaseUrl;
 
     private final ServerRedirectStrategy redirectStrategy = new DefaultServerRedirectStrategy();
 
@@ -33,92 +43,96 @@ public class CustomOAuth2SuccessHandler implements ServerAuthenticationSuccessHa
     @NullMarked
     public Mono<Void> onAuthenticationSuccess(WebFilterExchange webFilterExchange, Authentication authentication) {
         OAuth2AuthenticationToken oauthToken = (OAuth2AuthenticationToken) authentication;
-        String registrationId = oauthToken.getAuthorizedClientRegistrationId();
+        ServerWebExchange exchange = webFilterExchange.getExchange();
 
-        // 1. Delegate the data parsing to our decoupled strategy layer
-        OAuth2SyncPayload syncBody = extractorFactory.extract(registrationId, oauthToken.getPrincipal());
+        OAuth2SyncPayload syncPayload = extractorFactory.extract(
+                oauthToken.getAuthorizedClientRegistrationId(),
+                oauthToken.getPrincipal()
+        );
 
-        return webFilterExchange.getExchange().getSession().flatMap(webSession -> {
-            String existingUserId = webSession.getAttribute("userId");
-            Boolean isLinkingInProgress = webSession.getAttribute("oauth2_linking_in_progress");
+        return exchange.getSession().flatMap(session -> {
+            String existingUserId = session.getAttribute("userId");
+            Boolean isLinkingInProgress = session.getAttribute("oauth2_linking_in_progress");
 
-            // Clear the linking handshake flag to prevent stale reuse
-            webSession.getAttributes().remove("oauth2_linking_in_progress");
+            // Evict handshake flag immediately to prevent stale reuse
+            session.getAttributes().remove("oauth2_linking_in_progress");
 
             if (existingUserId != null && Boolean.TRUE.equals(isLinkingInProgress)) {
-                // ── CASE A: THE USER IS LINKING AN ACCOUNT ───────────────────
-                log.info("Active user [{}] is linking external identity provider [{}]...", existingUserId,
-                        syncBody.provider());
-
-                // Mint the transit JWT using our JwtService
-                String traceId = com.ft_transcendence.gateway.core.util.ReactiveTraceContext.getTraceId(webFilterExchange.getExchange());
-                @SuppressWarnings("unchecked")
-                List<String> roles = (List<String>) webSession.getAttribute("roles");
-                if (roles == null) {
-                    roles = List.of("ROLE_USER");
-                }
-                String transitJwt = jwtService.mint(existingUserId, roles, webSession.getId(), traceId);
-
-                // Beautiful and lean: just pass the provider registration secrets!
-                OAuth2LinkRequest linkRequest = new OAuth2LinkRequest(syncBody.provider(), syncBody.providerId());
-
-                return webClientBuilder.build()
-                        .post()
-                        .uri("https://auth-service/oauth2/link")
-                        .header("Authorization", "Bearer " + transitJwt)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .bodyValue(linkRequest)
-                        .retrieve()
-                        .toBodilessEntity()
-                        .then(redirectStrategy.sendRedirect(
-                                webFilterExchange.getExchange(),
-                                URI.create("http://localhost:5173/dashboard?link=success")))
-                        .onErrorResume(ex -> {
-                            log.error("Failed to link social identity record", ex);
-                            return redirectStrategy.sendRedirect(
-                                    webFilterExchange.getExchange(),
-                                    URI.create("http://localhost:5173/dashboard?link=error"));
-                        });
+                return executeAccountLink(exchange, session, syncPayload, existingUserId);
             }
 
-            // ── CASE B: STANDARD SSO LOGIN FLOW ──────────────────────────
-            log.info("OAuth2 login completed via [{}]. Executing downstream identity sync...", syncBody.provider());
-
-            return webClientBuilder.build()
-                    .post()
-                    .uri("https://auth-service/oauth2/sync")
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .bodyValue(syncBody)
-                    .retrieve()
-                    .bodyToMono(UserSummaryResponse.class)
-                    .flatMap(userSummary -> {
-                        // 3. Populate unified Redis Session Attributes
-                        webSession.getAttributes().put("userId", userSummary.userId());
-                        webSession.getAttributes().put("roles", userSummary.roles());
-                        webSession.getAttributes().put("isFullyAuthenticated", true);
-
-                        log.info("OAuth Session registration completed for User ID [{}]", userSummary.userId());
-
-                        // 4. Force frontend client redirection to React Dev Server Dashboard
-                        return redirectStrategy.sendRedirect(
-                                webFilterExchange.getExchange(),
-                                URI.create("http://localhost:5173/dashboard"));
-                    })
-                    .onErrorResume(ex -> {
-                        log.error("OAuth2 SSO login synchronization failed", ex);
-
-                        String errorType = "auth_error";
-                        if (ex instanceof org.springframework.web.reactive.function.client.WebClientResponseException.Conflict) {
-                            errorType = "email_taken";
-                        }
-
-                        return redirectStrategy.sendRedirect(
-                                webFilterExchange.getExchange(),
-                                URI.create("http://localhost:5173/login?error=" + errorType));
-                    });
+            return executeIdentitySync(exchange, session, syncPayload);
         });
     }
 
-    private record UserSummaryResponse(String userId, List<String> roles) {
+    // ── PRIVATE ORCHESTRATION EXTRACTIONS ───────────────────────────────────
+
+    private Mono<Void> executeAccountLink(ServerWebExchange exchange, WebSession session,
+                                          OAuth2SyncPayload payload, String userId) {
+        log.info("Active user [{}] is linking external identity provider [{}]...", userId, payload.provider());
+
+        String transitJwt = mintTransitToken(exchange, session, userId);
+        OAuth2LinkRequest linkRequest = new OAuth2LinkRequest(payload.provider(), payload.providerId());
+
+        return webClientBuilder.build()
+                .post()
+                .uri("https://auth-service/oauth2/link")
+                .header("Authorization", "Bearer " + transitJwt)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(linkRequest)
+                .retrieve()
+                .toBodilessEntity()
+                .then(redirectStrategy.sendRedirect(exchange, URI.create(frontendBaseUrl + "/dashboard?link=success")))
+                .onErrorResume(ex -> {
+                    log.error("Failed to link social identity record", ex);
+                    return redirectStrategy.sendRedirect(exchange, URI.create(frontendBaseUrl + "/dashboard?link=error"));
+                });
     }
+
+    private Mono<Void> executeIdentitySync(ServerWebExchange exchange, WebSession session, OAuth2SyncPayload payload) {
+        log.info("OAuth2 login completed via [{}]. Executing downstream identity sync...", payload.provider());
+
+        return webClientBuilder.build()
+                .post()
+                .uri("https://auth-service/oauth2/sync")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(payload)
+                .retrieve()
+                .bodyToMono(UserSummaryResponse.class)
+                .flatMap(userSummary -> {
+                    session.getAttributes().put("userId", userSummary.userId());
+                    session.getAttributes().put("roles", userSummary.roles());
+                    session.getAttributes().put("isFullyAuthenticated", true);
+
+                    log.info("OAuth Session registration completed for User ID [{}]", userSummary.userId());
+                    return redirectStrategy.sendRedirect(exchange, URI.create(frontendBaseUrl + "/dashboard"));
+                })
+                .onErrorResume(ex -> {
+                    log.error("OAuth2 SSO login synchronization failed", ex);
+                    String errorParam = resolveErrorParam(ex);
+                    return redirectStrategy.sendRedirect(exchange, URI.create(frontendBaseUrl + "/login?error=" + errorParam));
+                });
+    }
+
+    // ── PRIVATE UTILITY SCOPES ──────────────────────────────────────────────
+
+    private String mintTransitToken(ServerWebExchange exchange, WebSession session, String userId) {
+        String traceId = ReactiveTraceContext.getTraceId(exchange);
+
+        List<String> roles = session.getAttribute("roles");
+        if (roles == null) {
+            roles = List.of("ROLE_USER");
+        }
+
+        return jwtService.mint(userId, roles, session.getId(), traceId);
+    }
+
+    private String resolveErrorParam(Throwable ex) {
+        if (ex instanceof WebClientResponseException.Conflict) {
+            return "email_taken";
+        }
+        return "auth_error";
+    }
+
+    private record UserSummaryResponse(String userId, List<String> roles) {}
 }
