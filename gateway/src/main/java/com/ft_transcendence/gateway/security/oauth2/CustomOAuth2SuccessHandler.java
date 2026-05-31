@@ -25,6 +25,7 @@ public class CustomOAuth2SuccessHandler implements ServerAuthenticationSuccessHa
 
     private final WebClient.Builder webClientBuilder;
     private final OAuth2UserInfoCompositeExtractor extractorFactory;
+    private final com.ft_transcendence.gateway.domain.service.JwtService jwtService;
 
     private final ServerRedirectStrategy redirectStrategy = new DefaultServerRedirectStrategy();
 
@@ -46,31 +47,37 @@ public class CustomOAuth2SuccessHandler implements ServerAuthenticationSuccessHa
 
             if (existingUserId != null && Boolean.TRUE.equals(isLinkingInProgress)) {
                 // ── CASE A: THE USER IS LINKING AN ACCOUNT ───────────────────
-                log.info("Active user [{}] is linking external identity provider [{}]...", existingUserId, syncBody.provider());
+                log.info("Active user [{}] is linking external identity provider [{}]...", existingUserId,
+                        syncBody.provider());
 
-                OAuth2LinkRequest linkRequest = OAuth2LinkRequest.builder()
-                        .userId(java.util.UUID.fromString(existingUserId))
-                        .provider(syncBody.provider())
-                        .providerId(syncBody.providerId())
-                        .build();
+                // Mint the transit JWT using our JwtService
+                String traceId = com.ft_transcendence.gateway.core.util.ReactiveTraceContext.getTraceId(webFilterExchange.getExchange());
+                @SuppressWarnings("unchecked")
+                List<String> roles = (List<String>) webSession.getAttribute("roles");
+                if (roles == null) {
+                    roles = List.of("ROLE_USER");
+                }
+                String transitJwt = jwtService.mint(existingUserId, roles, webSession.getId(), traceId);
+
+                // Beautiful and lean: just pass the provider registration secrets!
+                OAuth2LinkRequest linkRequest = new OAuth2LinkRequest(syncBody.provider(), syncBody.providerId());
 
                 return webClientBuilder.build()
                         .post()
                         .uri("https://auth-service/oauth2/link")
+                        .header("Authorization", "Bearer " + transitJwt)
                         .contentType(MediaType.APPLICATION_JSON)
                         .bodyValue(linkRequest)
                         .retrieve()
                         .toBodilessEntity()
                         .then(redirectStrategy.sendRedirect(
                                 webFilterExchange.getExchange(),
-                                URI.create("http://localhost:5173/dashboard?link=success")
-                        ))
+                                URI.create("http://localhost:5173/dashboard?link=success")))
                         .onErrorResume(ex -> {
                             log.error("Failed to link social identity record", ex);
                             return redirectStrategy.sendRedirect(
                                     webFilterExchange.getExchange(),
-                                    URI.create("http://localhost:5173/dashboard?link=error")
-                            );
+                                    URI.create("http://localhost:5173/dashboard?link=error"));
                         });
             }
 
@@ -95,8 +102,7 @@ public class CustomOAuth2SuccessHandler implements ServerAuthenticationSuccessHa
                         // 4. Force frontend client redirection to React Dev Server Dashboard
                         return redirectStrategy.sendRedirect(
                                 webFilterExchange.getExchange(),
-                                URI.create("http://localhost:5173/dashboard")
-                        );
+                                URI.create("http://localhost:5173/dashboard"));
                     })
                     .onErrorResume(ex -> {
                         log.error("OAuth2 SSO login synchronization failed", ex);
@@ -108,11 +114,11 @@ public class CustomOAuth2SuccessHandler implements ServerAuthenticationSuccessHa
 
                         return redirectStrategy.sendRedirect(
                                 webFilterExchange.getExchange(),
-                                URI.create("http://localhost:5173/login?error=" + errorType)
-                        );
+                                URI.create("http://localhost:5173/login?error=" + errorType));
                     });
         });
     }
 
-    private record UserSummaryResponse(String userId, List<String> roles) {}
+    private record UserSummaryResponse(String userId, List<String> roles) {
+    }
 }

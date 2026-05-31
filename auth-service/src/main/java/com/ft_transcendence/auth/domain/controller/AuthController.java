@@ -1,25 +1,26 @@
 package com.ft_transcendence.auth.domain.controller;
 
 import com.ft_transcendence.auth.domain.dto.AuthStateResult;
+import com.ft_transcendence.auth.domain.dto.request.LoginRequest;
+import com.ft_transcendence.auth.domain.dto.request.RegisterRequest;
+import com.ft_transcendence.auth.domain.dto.response.AuthResponse;
+import com.ft_transcendence.auth.domain.dto.response.UserProfileResponse;
+import com.ft_transcendence.auth.domain.mapper.UserMapper;
+import com.ft_transcendence.auth.domain.model.UserAuth;
+import com.ft_transcendence.auth.domain.service.AuthService;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import com.ft_transcendence.auth.domain.model.UserAuth;
-import com.ft_transcendence.auth.domain.mapper.UserMapper;
-import org.springframework.security.oauth2.jwt.Jwt;
-import com.ft_transcendence.auth.domain.service.AuthService;
-import org.springframework.web.bind.annotation.GetMapping;
-import com.ft_transcendence.auth.domain.dto.request.LoginRequest;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.PostMapping;
-import com.ft_transcendence.auth.domain.dto.response.AuthResponse;
-import com.ft_transcendence.auth.domain.dto.request.RegisterRequest;
-import org.springframework.web.bind.annotation.RestController;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequiredArgsConstructor
@@ -29,37 +30,54 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request, HttpServletRequest servletRequest) {
+    public ResponseEntity<AuthResponse> register(
+            @Valid @RequestBody RegisterRequest request, 
+            HttpServletRequest servletRequest) {
 
-        UserAuth savedUser = authService.register(request, servletRequest);
-        AuthResponse response = userMapper.toRegisterResponse(savedUser);
+        UserAuth savedUser = authService.register(request);
+        
+        // Populate the active session properties directly inside the controller tier boundary
+        HttpSession session = servletRequest.getSession(true);
+        syncSessionAttributes(savedUser, session);
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        return ResponseEntity.status(HttpStatus.CREATED).body(userMapper.toRegisterResponse(savedUser));
     }
 
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest servletRequest) {
-        AuthStateResult stateResult = authService.login(request, servletRequest);
+    public ResponseEntity<AuthResponse> login(
+            @Valid @RequestBody LoginRequest request, 
+            HttpServletRequest servletRequest) {
+        
+        AuthStateResult stateResult = authService.login(request);
 
-        AuthResponse response = userMapper.toLoginResponse(stateResult);
+        HttpSession session = servletRequest.getSession(true);
+        syncSessionAttributes(stateResult.user(), session);
 
         if ("AWAITING_MFA".equals(stateResult.status())) {
-            return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
+            return ResponseEntity.status(HttpStatus.ACCEPTED).body(userMapper.toLoginResponse(stateResult));
         }
 
-        return ResponseEntity.status(HttpStatus.OK).body(response);
+        return ResponseEntity.ok(userMapper.toLoginResponse(stateResult));
     }
 
     @GetMapping("/users")
     @PreAuthorize("hasAuthority('SCOPE_USER') or hasRole('USER')")
-    public ResponseEntity<com.ft_transcendence.auth.domain.dto.response.UserProfileResponse> getProfile(@AuthenticationPrincipal Jwt jwt) {
-        String userIdStr = jwt.getSubject();
-        java.util.UUID userId = java.util.UUID.fromString(userIdStr);
-
+    public ResponseEntity<UserProfileResponse> getProfile(@AuthenticationPrincipal Jwt jwt) {
+        UUID userId = UUID.fromString(jwt.getSubject());
         UserAuth userDetails = authService.getUserDetails(userId);
-        com.ft_transcendence.auth.domain.dto.response.UserProfileResponse response = userMapper.toProfileResponse(userDetails);
-
-        return ResponseEntity.ok(response);
+        
+        return ResponseEntity.ok(userMapper.toProfileResponse(userDetails));
     }
 
+    // ── WEB SESSION HANDSHAKE SYNC ──────────────────────────────────────────
+
+    private void syncSessionAttributes(UserAuth user, HttpSession session) {
+        List<String> roleStrings = user.getRoles().stream()
+                .map(Enum::name)
+                .toList();
+
+        session.setAttribute("roles", roleStrings);
+        session.setAttribute("userId", user.getUserId());
+        session.setAttribute("isFullyAuthenticated", !user.is2faEnabled());
+    }
 }
