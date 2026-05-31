@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Logo from '../components/Logo';
 import { useAuth } from '../context/AuthContext';
-import { getUsers, getMfaSetup, confirmMfaSetup } from '../services/api';
+import { getUsers, getMfaSetup, confirmMfaSetup, unlinkOAuth2Provider, redirectToGoogleOAuth, redirectToFortyTwoOAuth } from '../services/api';
 import { QRCodeSVG } from 'qrcode.react';
 
 export default function DashboardScreen() {
@@ -21,6 +21,10 @@ export default function DashboardScreen() {
   const [mfaSuccess, setMfaSuccess] = useState(false);
   const [mfaError, setMfaError] = useState('');
 
+  // Link status notifications
+  const [linkMessage, setLinkMessage] = useState('');
+  const [linkError, setLinkError] = useState('');
+
   // Validate session on dashboard load and populate profile context
   useEffect(() => {
     async function verifyAccess() {
@@ -35,6 +39,51 @@ export default function DashboardScreen() {
     }
     verifyAccess();
   }, [logout, navigate]);
+
+  // Handle OAuth linking query feedback on redirection back to dashboard
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('link') === 'success') {
+      setLinkMessage('Social identity provider linked successfully!');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (params.get('link') === 'error') {
+      setLinkError('Failed to link social identity. Provider might already be linked to another profile.');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
+  const isLinked = (provider) => {
+    if (!profile || !profile.identities) return false;
+    return profile.identities.some(id => id.provider === provider);
+  };
+
+  const getProviderId = (provider) => {
+    if (!profile || !profile.identities) return '';
+    const found = profile.identities.find(id => id.provider === provider);
+    return found ? found.providerId : '';
+  };
+
+  const handleUnlink = async (provider) => {
+    if (!window.confirm(`Are you sure you want to unlink your ${provider} account?`)) {
+      return;
+    }
+    setLinkError('');
+    setLinkMessage('');
+    try {
+      const { status, data } = await unlinkOAuth2Provider(provider);
+      if (status === 200) {
+        setLinkMessage(`${provider} disconnected successfully.`);
+        const response = await getUsers();
+        if (response.status === 200) {
+          setProfile(response.data);
+        }
+      } else {
+        setLinkError(data.message || `Failed to unlink ${provider}.`);
+      }
+    } catch (err) {
+      setLinkError('Error contacting Gateway service.');
+    }
+  };
 
   const handleTestApi = async () => {
     setLoading(true);
@@ -127,6 +176,13 @@ export default function DashboardScreen() {
             style={{ textAlign: 'left', justifyContent: 'flex-start' }}
           >
             🔒 Multi-Factor Setup
+          </button>
+          <button 
+            className={`btn btn-full ${activeTab === 'linking' ? 'btn-primary' : 'btn-ghost'}`} 
+            onClick={() => setActiveTab('linking')}
+            style={{ textAlign: 'left', justifyContent: 'flex-start' }}
+          >
+            🔗 Linked Accounts
           </button>
           <button 
             className={`btn btn-full ${activeTab === 'api' ? 'btn-primary' : 'btn-ghost'}`} 
@@ -457,6 +513,86 @@ export default function DashboardScreen() {
                   </pre>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Linked Accounts Tab */}
+          {activeTab === 'linking' && (
+            <div className="stack stack-6">
+              <div>
+                <h2 className="text-display" style={{ fontSize: '1.75rem', marginBottom: '8px' }}>
+                  Linked Identity Providers
+                </h2>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                  Connect or disconnect social single-sign-on (SSO) options to simplify access to your profile.
+                </p>
+              </div>
+
+              {linkMessage && (
+                <div className="alert alert--success">
+                  {linkMessage}
+                </div>
+              )}
+
+              {linkError && (
+                <div className="alert alert--error">
+                  {linkError}
+                </div>
+              )}
+
+              <div className="stack stack-4">
+                {/* Google Provider Card */}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  background: 'rgba(255,255,255,0.01)',
+                  padding: '20px 24px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-subtle)',
+                  transition: 'border-color 0.2s'
+                }}>
+                  <div>
+                    <h4 className="text-display" style={{ fontSize: '1.1rem', marginBottom: '4px' }}>Google Access Node</h4>
+                    <span className="text-mono" style={{ fontSize: '0.78rem', color: isLinked('GOOGLE') ? 'var(--teal-glow)' : 'var(--text-secondary)' }}>
+                      {isLinked('GOOGLE') ? `Connected (Provider ID: ${getProviderId('GOOGLE')})` : 'Disconnected'}
+                    </span>
+                  </div>
+                  <button
+                    className={`btn ${isLinked('GOOGLE') ? 'btn-ghost' : 'btn-primary'}`}
+                    style={{ minWidth: '120px' }}
+                    onClick={() => isLinked('GOOGLE') ? handleUnlink('GOOGLE') : redirectToGoogleOAuth(true)}
+                  >
+                    {isLinked('GOOGLE') ? 'Disconnect' : 'Connect'}
+                  </button>
+                </div>
+
+                {/* 42 Network Node Card */}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  background: 'rgba(255,255,255,0.01)',
+                  padding: '20px 24px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-subtle)',
+                  transition: 'border-color 0.2s'
+                }}>
+                  <div>
+                    <h4 className="text-display" style={{ fontSize: '1.1rem', marginBottom: '4px' }}>42 Network Node</h4>
+                    <span className="text-mono" style={{ fontSize: '0.78rem', color: isLinked('FORTYTWO') ? 'var(--teal-glow)' : 'var(--text-secondary)' }}>
+                      {isLinked('FORTYTWO') ? `Connected (Provider ID: ${getProviderId('FORTYTWO')})` : 'Disconnected'}
+                    </span>
+                  </div>
+                  <button
+                    className={`btn ${isLinked('FORTYTWO') ? 'btn-ghost' : 'btn-primary'}`}
+                    style={{ minWidth: '120px' }}
+                    onClick={() => isLinked('FORTYTWO') ? handleUnlink('FORTYTWO') : redirectToFortyTwoOAuth(true)}
+                  >
+                    {isLinked('FORTYTWO') ? 'Disconnect' : 'Connect'}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </section>

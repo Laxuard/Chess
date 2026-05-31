@@ -37,31 +37,81 @@ public class CustomOAuth2SuccessHandler implements ServerAuthenticationSuccessHa
         // 1. Delegate the data parsing to our decoupled strategy layer
         OAuth2SyncPayload syncBody = extractorFactory.extract(registrationId, oauthToken.getPrincipal());
 
-        log.info("OAuth2 login completed via [{}]. Executing downstream identity sync...", syncBody.provider());
+        return webFilterExchange.getExchange().getSession().flatMap(webSession -> {
+            String existingUserId = webSession.getAttribute("userId");
+            Boolean isLinkingInProgress = webSession.getAttribute("oauth2_linking_in_progress");
 
-        // 2. Dispatch the back-channel mTLS synchronization request
-        return webClientBuilder.build()
-                .post()
-                .uri("https://auth-service/oauth2/sync")
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(syncBody)
-                .retrieve()
-                .bodyToMono(UserSummaryResponse.class)
-                .flatMap(userSummary -> webFilterExchange.getExchange().getSession().flatMap(webSession -> {
+            // Clear the linking handshake flag to prevent stale reuse
+            webSession.getAttributes().remove("oauth2_linking_in_progress");
 
-                    // 3. Populate unified Redis Session Attributes
-                    webSession.getAttributes().put("userId", userSummary.userId());
-                    webSession.getAttributes().put("roles", userSummary.roles());
-                    webSession.getAttributes().put("isFullyAuthenticated", true);
+            if (existingUserId != null && Boolean.TRUE.equals(isLinkingInProgress)) {
+                // ── CASE A: THE USER IS LINKING AN ACCOUNT ───────────────────
+                log.info("Active user [{}] is linking external identity provider [{}]...", existingUserId, syncBody.provider());
 
-                    log.info("OAuth Session registration completed for User ID [{}]", userSummary.userId());
+                OAuth2LinkRequest linkRequest = OAuth2LinkRequest.builder()
+                        .userId(java.util.UUID.fromString(existingUserId))
+                        .provider(syncBody.provider())
+                        .providerId(syncBody.providerId())
+                        .build();
 
-                    // 4. Force frontend client redirection to React Dev Server Dashboard
-                    return redirectStrategy.sendRedirect(
-                            webFilterExchange.getExchange(),
-                            URI.create("http://localhost:5173/dashboard")
-                    );
-                }));
+                return webClientBuilder.build()
+                        .post()
+                        .uri("https://auth-service/oauth2/link")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .bodyValue(linkRequest)
+                        .retrieve()
+                        .toBodilessEntity()
+                        .then(redirectStrategy.sendRedirect(
+                                webFilterExchange.getExchange(),
+                                URI.create("http://localhost:5173/dashboard?link=success")
+                        ))
+                        .onErrorResume(ex -> {
+                            log.error("Failed to link social identity record", ex);
+                            return redirectStrategy.sendRedirect(
+                                    webFilterExchange.getExchange(),
+                                    URI.create("http://localhost:5173/dashboard?link=error")
+                            );
+                        });
+            }
+
+            // ── CASE B: STANDARD SSO LOGIN FLOW ──────────────────────────
+            log.info("OAuth2 login completed via [{}]. Executing downstream identity sync...", syncBody.provider());
+
+            return webClientBuilder.build()
+                    .post()
+                    .uri("https://auth-service/oauth2/sync")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(syncBody)
+                    .retrieve()
+                    .bodyToMono(UserSummaryResponse.class)
+                    .flatMap(userSummary -> {
+                        // 3. Populate unified Redis Session Attributes
+                        webSession.getAttributes().put("userId", userSummary.userId());
+                        webSession.getAttributes().put("roles", userSummary.roles());
+                        webSession.getAttributes().put("isFullyAuthenticated", true);
+
+                        log.info("OAuth Session registration completed for User ID [{}]", userSummary.userId());
+
+                        // 4. Force frontend client redirection to React Dev Server Dashboard
+                        return redirectStrategy.sendRedirect(
+                                webFilterExchange.getExchange(),
+                                URI.create("http://localhost:5173/dashboard")
+                        );
+                    })
+                    .onErrorResume(ex -> {
+                        log.error("OAuth2 SSO login synchronization failed", ex);
+
+                        String errorType = "auth_error";
+                        if (ex instanceof org.springframework.web.reactive.function.client.WebClientResponseException.Conflict) {
+                            errorType = "email_taken";
+                        }
+
+                        return redirectStrategy.sendRedirect(
+                                webFilterExchange.getExchange(),
+                                URI.create("http://localhost:5173/login?error=" + errorType)
+                        );
+                    });
+        });
     }
 
     private record UserSummaryResponse(String userId, List<String> roles) {}

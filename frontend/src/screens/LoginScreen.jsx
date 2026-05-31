@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import AuthLayout from '../components/AuthLayout';
 import Logo from '../components/Logo';
 import { loginWithCredentials, redirectToGoogleOAuth } from '../services/api';
@@ -27,12 +27,23 @@ const EyeIcon = ({ open }) => open ? (
 
 export default function LoginScreen() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { setUser } = useAuth();
 
   const [form, setForm] = useState({ username: '', password: '' });
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const errParam = params.get('error');
+    if (errParam === 'email_taken') {
+      setError('This email address is already bound to a username and password account. Please log in with your credentials.');
+    } else if (errParam === 'auth_error') {
+      setError('Authentication failed. Please try again.');
+    }
+  }, [location]);
 
   const handleChange = (e) => {
     setForm(f => ({ ...f, [e.target.name]: e.target.value }));

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getUsers } from '../services/api';
+import { getUsers, logoutUser } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -29,9 +29,11 @@ export function AuthProvider({ children }) {
     return null;
   }, [navigate]);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    try {
+      await logoutUser();
+    } catch (_) { /* silent */ }
     setUser(null);
-    // Clear cookies naturally on gateway logout or just clear context state
     navigate('/login');
   }, [navigate]);
 

@@ -45,7 +45,13 @@ public class SecurityConfig {
                 )
 
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
-                .logout(ServerHttpSecurity.LogoutSpec::disable)
+                .logout(logout -> logout
+                        .logoutUrl("/api/auth/logout")
+                        .logoutSuccessHandler((exchange, authentication) -> {
+                            exchange.getExchange().getResponse().setStatusCode(org.springframework.http.HttpStatus.OK);
+                            return exchange.getExchange().getSession().flatMap(org.springframework.web.server.WebSession::invalidate);
+                        })
+                )
                 .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
                 .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
 

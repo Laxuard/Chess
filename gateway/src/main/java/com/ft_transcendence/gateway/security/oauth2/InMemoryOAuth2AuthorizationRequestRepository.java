@@ -29,7 +29,15 @@ public class InMemoryOAuth2AuthorizationRequestRepository
         if (authorizationRequest != null && authorizationRequest.getState() != null) {
             ramCache.put(authorizationRequest.getState(), authorizationRequest);
         }
-        return Mono.empty();
+        boolean isLink = exchange.getRequest().getQueryParams().containsKey("link");
+        return exchange.getSession().flatMap(session -> {
+            if (isLink) {
+                session.getAttributes().put("oauth2_linking_in_progress", true);
+            } else {
+                session.getAttributes().remove("oauth2_linking_in_progress");
+            }
+            return Mono.empty();
+        });
     }
 
     @Override

@@ -9,6 +9,9 @@ import com.ft_transcendence.auth.domain.repository.UserAuthRepository;
 import com.ft_transcendence.auth.domain.dto.request.OAuth2SyncRequest;
 import com.ft_transcendence.auth.domain.dto.response.OAuth2UserSummary;
 import com.ft_transcendence.auth.core.exception.DuplicateResourceException;
+import com.ft_transcendence.auth.core.exception.ResourceNotFoundException;
+import com.ft_transcendence.auth.core.exception.BadRequestException;
+import com.ft_transcendence.auth.domain.model.AuthProvider;
 import com.ft_transcendence.auth.domain.repository.UserIdentityRepository;
 
 import java.util.List;
@@ -79,6 +82,71 @@ public class OAuth2Service {
                 .userId(user.getUserId())
                 .roles(roleStrings)
                 .build();
+    }
+
+    /**
+     * Link an authenticated account to a new social provider.
+     */
+    @Transactional
+    public void linkAccount(UUID userId, AuthProvider provider, String providerId) {
+        UserAuth user = userAuthRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User"));
+
+        if (provider == AuthProvider.LOCAL) {
+            throw new BadRequestException("Cannot manually link LOCAL credentials.");
+        }
+
+        boolean alreadyClaimed = userIdentityRepository
+                .findByProviderAndProviderId(provider, providerId)
+                .isPresent();
+        if (alreadyClaimed) {
+            throw new DuplicateResourceException("This " + provider + " account is already linked to another user.");
+        }
+
+        boolean alreadyLinked = user.getIdentities().stream()
+                .anyMatch(id -> id.getProvider() == provider);
+        if (alreadyLinked) {
+            throw new BadRequestException("You have already linked a " + provider + " account.");
+        }
+
+        UserIdentity newIdentity = UserIdentity.builder()
+                .user(user)
+                .provider(provider)
+                .providerId(providerId)
+                .lastLoginAt(LocalDateTime.now())
+                .build();
+
+        user.addIdentity(newIdentity);
+        userAuthRepository.save(user);
+    }
+
+    /**
+     * Unlink a social provider from an account.
+     */
+    @Transactional
+    public void unlinkAccount(UUID userId, AuthProvider provider) {
+        UserAuth user = userAuthRepository.findByUserId(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User"));
+
+        if (provider == AuthProvider.LOCAL) {
+            throw new BadRequestException("Cannot unlink LOCAL credentials.");
+        }
+
+        UserIdentity targetIdentity = user.getIdentities().stream()
+                .filter(id -> id.getProvider() == provider)
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("Linked provider identity"));
+
+        boolean hasPassword = user.getPassword() != null && !user.getPassword().isBlank();
+        long activeSocialIdentities = user.getIdentities().size();
+
+        if (!hasPassword && activeSocialIdentities <= 1) {
+            throw new BadRequestException("Cannot unlink this provider. You must first set up a local password or link another social login to prevent account lockout.");
+        }
+
+        user.getIdentities().remove(targetIdentity);
+        userIdentityRepository.delete(targetIdentity);
+        userAuthRepository.save(user);
     }
 
 }

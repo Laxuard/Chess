@@ -122,8 +122,42 @@ export async function getUsers() {
  * Initiates Google OAuth2 by doing a full browser redirect.
  * The BFF gateway will handle the OAuth dance and redirect back.
  */
-export function redirectToGoogleOAuth() {
-  window.location.href = `${GATEWAY}/oauth2/authorization/google`;
+export function redirectToGoogleOAuth(isLink = false) {
+  const query = isLink ? '?link=true' : '';
+  window.location.href = `${GATEWAY}/oauth2/authorization/google${query}`;
+}
+
+/**
+ * Initiates FortyTwo OAuth2 by doing a full browser redirect.
+ */
+export function redirectToFortyTwoOAuth(isLink = false) {
+  const query = isLink ? '?link=true' : '';
+  window.location.href = `${GATEWAY}/oauth2/authorization/fortytwo${query}`;
+}
+
+/**
+ * POST /api/auth/oauth2/unlink
+ * Body: { provider }
+ */
+export async function unlinkOAuth2Provider(provider) {
+  const response = await apiFetch('/api/auth/oauth2/unlink', {
+    method: 'POST',
+    body: JSON.stringify({ provider }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  return { status: response.status, data };
+}
+
+/**
+ * POST /api/auth/logout
+ * Triggers full stateful session invalidation on the BFF Gateway.
+ */
+export async function logoutUser() {
+  const response = await apiFetch('/api/auth/logout', {
+    method: 'POST',
+  });
+  return response.status;
 }
 
 // ─── Session Interceptor ──────────────────────────────────────────────────

@@ -16,6 +16,13 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @EntityListeners(AuditingEntityListener.class)
+@Table(
+    name = "user_identity",
+    uniqueConstraints = @UniqueConstraint(
+        name = "uq_provider_provider_id",
+        columnNames = {"provider", "provider_id"}
+    )
+)
 public class UserIdentity {
 
     @Id
