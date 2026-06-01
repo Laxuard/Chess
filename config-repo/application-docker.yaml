@@ -8,9 +8,9 @@ spring:
       jks:
         microservice-bundle:
           keystore:
-            location: "file:/app/services/${spring.application.name}/${spring.application.name}.p12"
+            location: "file:/app/certs/services/${spring.application.name}/${spring.application.name}.p12"
           truststore:
-            location: "file:/app/truststore/truststore.p12"
+            location: "file:/app/certs/truststore/truststore.p12"
 
 eureka:
   instance:
@@ -19,5 +19,5 @@ eureka:
     service-url:
       defaultZone: https://eureka-server:${EUREKA_PORT}/eureka/
     tls:
-      key-store: "file:/app/services/${spring.application.name}/${spring.application.name}.p12"
-      trust-store: "file:/app/truststore/truststore.p12"
+      key-store: "file:/app/certs/services/${spring.application.name}/${spring.application.name}.p12"
+      trust-store: "file:/app/certs/truststore/truststore.p12"

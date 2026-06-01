@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 
 export default function MfaChallengeScreen() {
   const navigate = useNavigate();
-  const { setUser } = useAuth();
+  const { setUser, loadCurrentUser } = useAuth();
 
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -32,7 +32,7 @@ export default function MfaChallengeScreen() {
       const { status, data } = await verifyMfa(code);
 
       if (status === 200) {
-        setUser({ authenticated: true });
+        await loadCurrentUser();
         navigate('/dashboard');
       } else {
         setError(data?.message || 'Verification failed. Code may be invalid or expired.');

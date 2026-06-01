@@ -108,3 +108,9 @@ app:
     allowed-origins: "${CORS_ALLOWED_ORIGINS:http://localhost:5173}"
   frontend:
     base-url: "${FRONTEND_BASE_URL:http://localhost:5173}"
+
+logging:
+  level:
+    org.springframework.cloud.gateway: TRACE
+    org.springframework.cloud.loadbalancer: TRACE
+

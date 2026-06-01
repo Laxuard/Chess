@@ -14,9 +14,10 @@ export function AuthProvider({ children }) {
     try {
       const { status, data } = await getUsers();
       if (status === 200) {
-        // Since we are validated, store user state
-        setUser({ authenticated: true });
-        return { authenticated: true };
+        // Since we are validated, store full user profile state
+        const profile = { authenticated: true, ...data };
+        setUser(profile);
+        return profile;
       } else if (status === 401) {
         setUser(null);
       } else if (status === 403) {

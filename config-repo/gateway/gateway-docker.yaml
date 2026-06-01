@@ -5,9 +5,9 @@
 spring:
   data:
     redis:
-      host: redis
+      host: redis-container
           
 custom:
   jwt:
-    public-key-location: file:/app/jwt/jwt_public.pem
-    private-key-location: file:/app/jwt/jwt_private_pkcs8.pem
+    public-key-location: file:/app/certs/jwt/jwt_public.pem
+    private-key-location: file:/app/certs/jwt/jwt_private_pkcs8.pem

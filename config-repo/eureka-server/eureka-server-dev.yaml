@@ -1,0 +1,7 @@
+# ==========================================
+# EUREKA SERVER DEV OVERRIDES
+# ==========================================
+
+eureka:
+  instance:
+    hostname: localhost

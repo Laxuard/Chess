@@ -28,7 +28,7 @@ const EyeIcon = ({ open }) => open ? (
 export default function LoginScreen() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { setUser } = useAuth();
+  const { setUser, loadCurrentUser } = useAuth();
 
   const [form, setForm] = useState({ username: '', password: '' });
   const [showPw, setShowPw] = useState(false);
@@ -65,7 +65,7 @@ export default function LoginScreen() {
 
       if (status === 200 || status === 201) {
         if (data.status === 'AUTHENTICATED') {
-          setUser({ authenticated: true });
+          await loadCurrentUser();
           navigate('/dashboard');
         } else if (data.status === 'AWAITING_MFA') {
           navigate('/mfa-challenge');

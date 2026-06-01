@@ -1,13 +1,14 @@
-#server:
-#  ssl:
-#    enabled: true
-#    key-store: "file:/app/certs/eureka-server.p12"
-#    key-store-password: ${CERT_PASSWORD}
-#    trust-store: "file:/app/certs/truststore.p12"
-#    trust-store-password: ${CERT_PASSWORD}
-#
-#eureka:
-#  instance:
-#    hostname: eureka-server
-#
-#
+spring:
+  config:
+    import: "optional:configserver:https://config-server:${CONFIG_SERVER_PORT}"
+  cloud:
+    config:
+      tls:
+        enabled: true
+        key-store-type: PKCS12
+        trust-store-type: PKCS12
+        key-store: "file:/app/certs/services/${spring.application.name}/${spring.application.name}.p12"
+        key-store-password: "${CERT_PASSWORD}"
+        key-password: "${CERT_PASSWORD}"
+        trust-store: "file:/app/certs/truststore/truststore.p12"
+        trust-store-password: "${CERT_PASSWORD}"

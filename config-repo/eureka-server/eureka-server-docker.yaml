@@ -1,0 +1,7 @@
+# ==========================================
+# EUREKA SERVER DOCKER OVERRIDES
+# ==========================================
+
+eureka:
+  instance:
+    hostname: eureka-server

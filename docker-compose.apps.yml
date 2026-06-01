@@ -1,0 +1,135 @@
+# ==========================================
+# TRANSCENDENCE MICROSERVICES APPLICATION STACK
+# ==========================================
+# Run after starting the infrastructure compose stack:
+# docker compose -f docker-compose.yml up -d
+# docker compose -f docker-compose.apps.yml up --build -d
+
+services:
+  # == 1. Spring Cloud Config Server (Internal Only) ==
+  config-server:
+    build:
+      context: ./config-server
+      dockerfile: Dockerfile
+    image: transcendence-config-server:latest
+    container_name: config-server
+    environment:
+      - SPRING_PROFILES_ACTIVE=native,docker
+      - CONFIG_SERVER_PORT=${CONFIG_SERVER_PORT}
+      - CERT_PASSWORD=${CERT_PASSWORD}
+    volumes:
+      - ./certs:/app/certs:ro             # Mounts secure mTLS keystores/truststores
+      - ./config-repo:/app/config-repo:ro # Mounts local git configuration repository
+    healthcheck:
+      test: [ "CMD", "curl", "-k", "--cert", "/app/certs/services/config-server/config-server.p12:${CERT_PASSWORD}", "--cert-type", "P12", "-f", "https://localhost:${CONFIG_SERVER_PORT}/actuator/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - transcendence-net
+
+  # == 2. Eureka Service Discovery Registry (Internal Only) ==
+  eureka-server:
+    build:
+      context: ./eureka-server
+      dockerfile: Dockerfile
+    image: transcendence-eureka-server:latest
+    container_name: eureka-server
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - EUREKA_PORT=${EUREKA_PORT}
+      - CONFIG_SERVER_PORT=${CONFIG_SERVER_PORT}
+      - CERT_PASSWORD=${CERT_PASSWORD}
+    volumes:
+      - ./certs:/app/certs:ro
+    healthcheck:
+      test: [ "CMD", "curl", "-k", "--cert", "/app/certs/services/eureka-server/eureka-server.p12:${CERT_PASSWORD}", "--cert-type", "P12", "-f", "https://localhost:${EUREKA_PORT}/actuator/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      config-server:
+        condition: service_healthy
+    networks:
+      - transcendence-net
+
+  # == 3. Core Authentication Service (Internal Only) ==
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    image: transcendence-auth-service:latest
+    container_name: auth-service
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - AUTH_SERVICE_PORT=${AUTH_SERVICE_PORT}
+      - CONFIG_SERVER_PORT=${CONFIG_SERVER_PORT}
+      - EUREKA_PORT=${EUREKA_PORT}
+      - CERT_PASSWORD=${CERT_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_PORT=${REDIS_PORT}
+      - GATEWAY_PORT=${GATEWAY_PORT}
+    volumes:
+      - ./certs:/app/certs:ro
+    healthcheck:
+      test: [ "CMD", "curl", "-k", "--cert", "/app/certs/services/auth-service/auth-service.p12:${CERT_PASSWORD}", "--cert-type", "P12", "-f", "https://localhost:${AUTH_SERVICE_PORT}/actuator/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      config-server:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - transcendence-net
+
+  # == 4. Backend-For-Frontend (BFF) Gateway (Public Entrypoint) ==
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    image: transcendence-gateway:latest
+    container_name: gateway
+    ports:
+      - "${GATEWAY_PORT}:${GATEWAY_PORT}" # ONLY the Gateway is exposed to the host system!
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - GATEWAY_PORT=${GATEWAY_PORT}
+      - CONFIG_SERVER_PORT=${CONFIG_SERVER_PORT}
+      - EUREKA_PORT=${EUREKA_PORT}
+      - CERT_PASSWORD=${CERT_PASSWORD}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_PORT=${REDIS_PORT}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+      - FRONTEND_BASE_URL=${FRONTEND_BASE_URL:-http://localhost:5173}
+    volumes:
+      - ./certs:/app/certs:ro
+    healthcheck:
+      test: [ "CMD", "curl", "-k", "--cert", "/app/certs/services/gateway/gateway.p12:${CERT_PASSWORD}", "--cert-type", "P12", "-f", "https://localhost:${GATEWAY_PORT}/actuator/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      config-server:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+    networks:
+      - transcendence-net
+
+# == 5. Bridge Network Connectivity ==
+networks:
+  transcendence-net:
+    external: true # Connects seamlessly to the pre-existing infrastructure network

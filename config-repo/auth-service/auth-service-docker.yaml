@@ -1,0 +1,17 @@
+# ==========================================
+# AUTH SERVICE DOCKER OVERRIDES
+# ==========================================
+
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres-db:5432/${DB_NAME}
+  
+  data:
+    redis:
+      host: redis-container
+  
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: "https://gateway:${GATEWAY_PORT}/.well-known/jwks.json"
