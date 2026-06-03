@@ -18,6 +18,7 @@ public record UserProfileResponse(
         List<String> roles,
         boolean enabled,
         boolean is2faEnabled,
+        boolean hasPassword,
         List<MfaMethodSummary> twoFactorMethods,
         List<IdentitySummary> identities,
         LocalDateTime createdAt

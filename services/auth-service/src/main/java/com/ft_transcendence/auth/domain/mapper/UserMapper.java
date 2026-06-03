@@ -55,6 +55,8 @@ public class UserMapper {
                         .build())
                 .toList();
 
+        boolean hasPassword = user.getPassword() != null && !user.getPassword().isBlank();
+
         return UserProfileResponse.builder()
                 .userId(user.getUserId())
                 .username(user.getUsername())
@@ -62,6 +64,7 @@ public class UserMapper {
                 .roles(userRoles)
                 .enabled(user.isEnabled())
                 .is2faEnabled(user.is2faEnabled())
+                .hasPassword(hasPassword)
                 .twoFactorMethods(mfaSummaries)
                 .identities(identitySummaries)
                 .createdAt(user.getCreatedAt())

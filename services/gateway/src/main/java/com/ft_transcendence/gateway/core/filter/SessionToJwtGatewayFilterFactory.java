@@ -16,7 +16,8 @@ import java.util.List;
 
 @Slf4j
 @Component
-public class SessionToJwtGatewayFilterFactory extends AbstractGatewayFilterFactory<SessionToJwtGatewayFilterFactory.Config> {
+public class SessionToJwtGatewayFilterFactory
+        extends AbstractGatewayFilterFactory<SessionToJwtGatewayFilterFactory.Config> {
 
     private final JwtService jwtService;
 
@@ -38,8 +39,7 @@ public class SessionToJwtGatewayFilterFactory extends AbstractGatewayFilterFacto
                 log.warn("Missing session cookie context container on guarded route request.");
                 return Mono.error(new ResponseStatusException(
                         HttpStatus.UNAUTHORIZED,
-                        "An active cookie session is required to traverse this gateway proxy"
-                ));
+                        "An active cookie session is required to traverse this gateway proxy"));
             }
 
             return exchange.getSession().flatMap(webSession -> {
@@ -50,15 +50,13 @@ public class SessionToJwtGatewayFilterFactory extends AbstractGatewayFilterFacto
                     log.warn("Access intercept - Missing or expired active Redis context.");
                     return Mono.error(new ResponseStatusException(
                             HttpStatus.UNAUTHORIZED,
-                            "An active cookie session is required to traverse this gateway proxy"
-                    ));
+                            "An active cookie session is required to traverse this gateway proxy"));
                 }
 
                 String userId = userIdAttr.toString();
                 String sessionId = webSession.getId();
                 @SuppressWarnings("unchecked")
                 List<String> roles = (List<String>) rolesAttr;
-
 
                 String transitJwt = jwtService.mint(userId, roles, sessionId, traceId);
 

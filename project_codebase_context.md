@@ -16,20 +16,26 @@ This single document contains the handwritten source code of the Transcendence M
 |____docker
 | |____docker-compose.apps.yml
 | |____docker-compose.yml
+| |____.env
 | |____env.example
 |____docs
 | |____database_erd.mermaid
 | |____mtls_trust_chain.mermaid
+| |____new_service_integration.md
 | |____oauth2_sync_flow.mermaid
 | |____README.md
 | |____security_and_auth_flow.mermaid
 | |____system_architecture.mermaid
 |____.env
 |____project_codebase_context.md
+|____README.md
 |____scripts
-| |____dev-start.sh
+| |____clean.sh
+| |____docker.sh
+| |____frontend.sh
 | |____generate-ai-context.sh
 | |____mtls-setup.sh
+| |____register-service.sh
 |____services
 | |____auth-service
 | | |____Dockerfile
@@ -40,7 +46,6 @@ This single document contains the handwritten source code of the Transcendence M
 | | |____src
 | |____config-server
 | | |____Dockerfile
-| | |____HELP.md
 | | |____.mvn
 | | |____mvnw
 | | |____mvnw.cmd
@@ -69,73 +74,2051 @@ This single document contains the handwritten source code of the Transcendence M
 | | |____mvnw.cmd
 | | |____pom.xml
 | | |____src
+|____templates
+| |____nodejs-express
+| | |____docker-compose.fragment.yml
+| | |____Dockerfile
+| | |____eureka.js
+| | |____jwt-validator.js
+| | |____package.json
+| | |____server.js
+| |____python-fastapi
+| | |____app.py
+| | |____docker-compose.fragment.yml
+| | |____Dockerfile
+| | |____eureka.py
+| | |____jwt_validator.py
+| | |____requirements.txt
 ```
 
-## 📄 File: ./.env
-```properties
-# .env — never commit this
-DB_PASSWORD=password
-DB_USER=transcendence
-DB_NAME=transcendence_db
+## 📄 File: ./config/config-repo/application-dev.yaml
+```yaml
+# ==========================================
+#  Application Dev Configuration
+# ==========================================
 
-REDIS_PASSWORD=password
+spring:
+  ssl:
+    bundle:
+      jks:
+        microservice-bundle:
+          keystore:
+            location: "file:${CERT_DIR_PATH}/services/${spring.application.name}/${spring.application.name}.p12"
+          truststore:
+            location: "file:${CERT_DIR_PATH}/truststore/truststore.p12"
 
-RABBITMQ_USER=admin
-RABBITMQ_PASSWORD=password
+eureka:
+  instance:
+    hostname: localhost
+  client:
+    service-url:
+      defaultZone: https://localhost:${EUREKA_PORT}/eureka/
+    tls:
+      key-store: "file:${CERT_DIR_PATH}/services/${spring.application.name}/${spring.application.name}.p12"
+      trust-store: "file:${CERT_DIR_PATH}/truststore/truststore.p12"
+```
 
-CERT_PASSWORD=password
-CERT_DIR_PATH=/home/yjazouli/1337/Microservices/certs
+## 📄 File: ./config/config-repo/application-docker.yaml
+```yaml
+# ==========================================
+#  Application Docker Configuration
+# ==========================================
 
-EUREKA_USERNAME=admin
-EUREKA_PASSWORD=password
+spring:
+  ssl:
+    bundle:
+      jks:
+        microservice-bundle:
+          keystore:
+            location: "file:/app/certs/services/${spring.application.name}/${spring.application.name}.p12"
+          truststore:
+            location: "file:/app/certs/truststore/truststore.p12"
 
-CONFIG_USERNAME=admin
-CONFIG_PASSWORD=password
-CONFIG_REPO_PATH=/home/yjazouli/1337/Microservices/config/config-repo
+eureka:
+  instance:
+    hostname: ${spring.application.name}
+  client:
+    service-url:
+      defaultZone: https://eureka-server:${EUREKA_PORT}/eureka/
+    tls:
+      key-store: "file:/app/certs/services/${spring.application.name}/${spring.application.name}.p12"
+      trust-store: "file:/app/certs/truststore/truststore.p12"
+```
 
-REDIS_PORT=6380
-EUREKA_PORT=8761
-GATEWAY_PORT=8080
-POSTGRES_PORT=5432
-RABBITMQ_PORT=5672
-AUTH_SERVICE_PORT=8081
-CONFIG_SERVER_PORT=8888
-RABBITMQ_MANAGEMENT_PORT=15672
+## 📄 File: ./config/config-repo/application.yaml
+```yaml
+# ==========================================
+# GLOBAL MICROSERVICE CONFIGURATION
+# ==========================================
 
-GOOGLE_CLIENT_ID=895874970701-07mag5f1pojc2i97mh5bmsf6euvmq5hv.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=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
+# == 1. Centralized Modern SSL Bundles ==
+spring:
+  ssl:
+    bundle:
+      jks:
+        microservice-bundle:
+          key:
+            alias: "${spring.application.name}"
+            password: "${CERT_PASSWORD}"
+          keystore:
+            password: "${CERT_PASSWORD}"
+            type: "PKCS12"
+          truststore:
+            password: "${CERT_PASSWORD}"
+            type: "PKCS12"
+  mvc:
+    problemdetails:
+      enabled: true
+  webflux:
+    problemdetails:
+      enabled: true
+
+# == 2. Inbound Server Configuration (Uses Modern Bundle) ==
+server:
+  ssl:
+    enabled: true
+    client-auth: need
+    bundle: microservice-bundle # Tomcat/Netty use the bundle natively
+  error:
+    include-stacktrace: never
+    include-message: always
+    include-binding-errors: always
+    include-exception: false
+
+# == 3. Eureka Discovery Configuration (Hybrid Layer) ==
+eureka:
+  instance:
+    prefer-ip-address: false
+    secure-port-enabled: true
+    non-secure-port-enabled: false
+  client:
+    fetch-registry: true
+    register-with-eureka: true
+    tls:
+      enabled: true
+      # Old-school properties provided explicitly for legacy client/server registration stability
+      key-password: "${CERT_PASSWORD}"
+      key-store-password: "${CERT_PASSWORD}"
+      key-store-type: "PKCS12"
+      trust-store-password: "${CERT_PASSWORD}"
+      trust-store-type: "PKCS12"
+
+# == 4. Observability & Logging ==
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,gateway,refresh
+  endpoint:
+    health:
+      show-details: always
+    gateway:
+      enabled: true
+
+logging:
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %clr([%36X{trace_id}]){cyan} %clr(%-5level) %clr(%logger{36}){magenta} - %msg%n"
+  level:
+    # Prevent common, expected client input errors (like 400 Bad Request or 401 Unauthorized) 
+    # from dumping massive multi-page warning stacks into your console logs.
+    org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler: WARN
+    org.springframework.web.server.handler.ResponseStatusExceptionHandler: WARN
+
+# == 5. API Documentation ==
+app:
+  error-docs-url: "https://api.transcendence.com/errors/"
+```
+
+## 📄 File: ./config/config-repo/auth-service/auth-service-dev.yaml
+```yaml
+# ==========================================
+# AUTH SERVICE DEVELOPMENT OVERRIDES
+# ==========================================
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:${POSTGRES_PORT}/${DB_NAME}
+  
+  data:
+    redis:
+      host: localhost
+  
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: "https://localhost:${GATEWAY_PORT}/.well-known/jwks.json"
+```
+
+## 📄 File: ./config/config-repo/auth-service/auth-service-docker.yaml
+```yaml
+# ==========================================
+# AUTH SERVICE DOCKER OVERRIDES
+# ==========================================
+
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres-db:${POSTGRES_PORT}/${DB_NAME}
+  
+  data:
+    redis:
+      host: redis-container
+  
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: "https://gateway:${GATEWAY_PORT}/.well-known/jwks.json"
 
 ```
 
-## 📄 File: ./.github/modernize/java-upgrade/hooks/scripts/recordToolUse.sh
+## 📄 File: ./config/config-repo/auth-service/auth-service.yaml
+```yaml
+# ==========================================
+# AUTH SERVICE CORE BASE CONFIGURATION
+# ==========================================
+
+server:
+  port: ${AUTH_SERVICE_PORT}
+  forward-headers-strategy: framework
+
+spring:
+  # == 1. Database Driver & Schema Config ==
+  datasource:
+    username: "${DB_USER}"
+    password: "${DB_PASSWORD}"
+    driver-class-name: org.postgresql.Driver
+  
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # == 2. Redis Connection & Session Management ==
+  session:
+    timeout: 7d
+    data:
+      redis:
+        namespace: "transcendence"
+        save-mode: on-set-attribute
+        repository-type: indexed
+  data:
+    redis:
+      port: ${REDIS_PORT}
+      password: "${REDIS_PASSWORD}"
+
+# ==========================================
+# OPENAPI / SWAGGER DOCUMENTATION CONFIGURATION
+# ==========================================
+springdoc:
+  server-url: "https://localhost:${GATEWAY_PORT}/api/auth"
+
+```
+
+## 📄 File: ./config/config-repo/eureka-server/eureka-server-dev.yaml
+```yaml
+# ==========================================
+# EUREKA SERVER DEV OVERRIDES
+# ==========================================
+
+eureka:
+  instance:
+    hostname: localhost
+
+```
+
+## 📄 File: ./config/config-repo/eureka-server/eureka-server-docker.yaml
+```yaml
+# ==========================================
+# EUREKA SERVER DOCKER OVERRIDES
+# ==========================================
+
+eureka:
+  instance:
+    hostname: eureka-server
+
+```
+
+## 📄 File: ./config/config-repo/eureka-server/eureka-server.yaml
+```yaml
+# ==========================================
+# Global Eureka Server Configuration
+# ==========================================
+
+server:
+  port: ${EUREKA_PORT}
+  ssl:
+    client-auth: want # Allow browsers to view the UI dashboard easily without requiring an mTLS certificate
+
+eureka:
+  client:
+    fetch-registry: false
+    register-with-eureka: false
+```
+
+## 📄 File: ./config/config-repo/gateway/gateway-dev.yaml
+```yaml
+# ==========================================
+#  Gateway Dev Configuration
+# ==========================================
+
+spring:
+  data:
+    redis:
+      host: localhost
+          
+custom:
+  jwt:
+    public-key-location: file:${CERT_DIR_PATH}/jwt/jwt_public.pem
+    private-key-location: file:${CERT_DIR_PATH}/jwt/jwt_private_pkcs8.pem
+```
+
+## 📄 File: ./config/config-repo/gateway/gateway-docker.yaml
+```yaml
+# ==========================================
+#  Gateway Docker Configuration
+# ==========================================
+
+spring:
+  data:
+    redis:
+      host: redis-container
+          
+custom:
+  jwt:
+    public-key-location: file:/app/certs/jwt/jwt_public.pem
+    private-key-location: file:/app/certs/jwt/jwt_private_pkcs8.pem
+```
+
+## 📄 File: ./config/config-repo/gateway/gateway.yaml
+```yaml
+# ==========================================
+# GATEWAY ROUTING & EDGE CONFIGURATION
+# ==========================================
+
+server:
+  port: ${GATEWAY_PORT}
+  ssl:
+    client-auth: none
+
+spring:
+  # == Redis Session Management ==
+  session:
+    timeout: 7d
+    data:
+      redis:
+        namespace: "transcendence"
+        save-mode: on-set-attribute
+        repository-type: indexed
+  data:
+    redis:
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
+
+  # == Security & OAuth2 Configuration ==
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope:
+              - openid
+              - profile
+              - email
+            redirect-uri: "{baseUrl}/login/oauth2/code/google"
+
+  # == WebClient & Netty Routing Engine Client SSL Configuration ==
+  cloud:
+    gateway:
+      server:
+        webflux:
+          httpclient:
+            wiretap: true
+            ssl:
+              ssl-bundle: microservice-bundle
+        # == Discovery Configuration ==
+          discovery:
+            locator:
+              enabled: true
+              lower-case-service-id: true
+
+          routes:
+            # Config Server Proxy (Internal only)
+            - id: config-server-proxy
+              uri: https://config-server:8888
+              order: 0
+              predicates:
+                - Path=/config-server/**
+              filters:
+                - StripPrefix=1
+
+            # Eureka Server Proxy (Internal only)
+            - id: eureka-server-proxy
+              uri: https://eureka-server:8761
+              order: 0
+              predicates:
+                - Path=/eureka-server/**
+              filters:
+                - StripPrefix=1
+
+            # OpenAPI Spec Bypass (High Priority)
+            - id: auth-service-openapi-bypass
+              uri: lb://auth-service
+              order: 1
+              predicates:
+                - Path=/api/auth/v3/api-docs/**, /api/auth/v3/api-docs
+              filters:
+                - StripPrefix=2
+
+            # Public paths
+            - id: auth-service-public
+              uri: lb://auth-service
+              order: 2
+              predicates:
+                - Path=/api/auth/login, /api/auth/register
+              filters:
+                - StripPrefix=2
+
+            # Semi-Protected (2FA challenge)
+            - id: auth-service-2fa-verification
+              uri: lb://auth-service
+              order: 3
+              predicates:
+                - Path=/api/auth/2fa/verify
+              filters:
+                - StripPrefix=2
+                - SessionToJwt
+
+            # Secure Catch-All (Enforces Full Authentication)
+            - id: auth-service-secure-catchall
+              uri: lb://auth-service
+              order: 4
+              predicates:
+                - Path=/api/auth/**
+              filters:
+                - StripPrefix=2
+                - SessionToJwt
+                - TwoFactorCheck
+
+# ==========================================
+# OPENAPI / SWAGGER AGGREGATION CONFIGURATION
+# ==========================================
+springdoc:
+  swagger-ui:
+    use-root-path: false
+    urls:
+      - name: "Authentication Service"
+        url: "/api/auth/v3/api-docs"
+
+# ==========================================
+# APPLICATION CORE SECURITY & CORS CONFIG
+# ==========================================
+app:
+  cors:
+    allowed-origins: "${CORS_ALLOWED_ORIGINS:http://localhost:5173}"
+  frontend:
+    base-url: "${FRONTEND_BASE_URL:http://localhost:5173}"
+
+logging:
+  level:
+    org.springframework.cloud.gateway: TRACE
+    org.springframework.cloud.loadbalancer: TRACE
+
+
+```
+
+## 📄 File: ./docker/docker-compose.yml
+```yaml
+services:
+  postgres-db:
+    image: postgres:15-alpine
+    container_name: postgres-db
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - transcendence-net
+
+  redis-container:
+    image: redis:7-alpine
+    container_name: redis-container
+    ports:
+      - "${REDIS_PORT}:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - redis_data:/data
+    networks:
+      - transcendence-net
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: redis-commander
+    environment:
+      - REDIS_HOST=redis-container
+      - REDIS_PORT=${REDIS_PORT}               # Always use the container's internal port here
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    ports:
+      - "6381:8081"                   # Binds your laptop's 6381 to container's 8081
+    networks:
+      - transcendence-net
+    depends_on:
+      - redis-container
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq
+    ports:
+      - "${RABBITMQ_PORT}:5672"    # AMQP — your services connect here
+      - "${RABBITMQ_MANAGEMENT_PORT}:15672"  # management UI — http://localhost:15672
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - transcendence-net
+
+
+volumes:
+  redis_data:
+  postgres_data:
+  rabbitmq_data:
+
+networks:
+  transcendence-net:
+    name: transcendence-net
+    driver: bridge
+```
+
+## 📄 File: ./docker/docker-compose.apps.yml
+```yaml
+# ==========================================
+# TRANSCENDENCE MICROSERVICES APPLICATION STACK
+# ==========================================
+# Run after starting the infrastructure compose stack:
+# docker compose -f docker-compose.yml up -d
+# docker compose -f docker-compose.apps.yml up --build -d
+
+services:
+  # == 1. Spring Cloud Config Server (Internal Only) ==
+  config-server:
+    build:
+      context: ../services/config-server
+      dockerfile: Dockerfile
+    image: transcendence-config-server:latest
+    container_name: config-server
+    environment:
+      - SPRING_PROFILES_ACTIVE=native,docker
+      - CONFIG_SERVER_PORT=${CONFIG_SERVER_PORT}
+      - CERT_PASSWORD=${CERT_PASSWORD}
+    volumes:
+      - ../certs:/app/certs:ro             # Mounts secure mTLS keystores/truststores
+      - ../config/config-repo:/app/config-repo:ro # Mounts local git configuration repository
+    healthcheck:
+      test: [ "CMD", "curl", "-k", "--cert", "/app/certs/services/config-server/config-server.p12:${CERT_PASSWORD}", "--cert-type", "P12", "-f", "https://localhost:${CONFIG_SERVER_PORT}/actuator/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - transcendence-net
+
+  # == 2. Eureka Service Discovery Registry (Internal Only) ==
+  eureka-server:
+    build:
+      context: ../services/eureka-server
+      dockerfile: Dockerfile
+    image: transcendence-eureka-server:latest
+    container_name: eureka-server
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - EUREKA_PORT=${EUREKA_PORT}
+      - CONFIG_SERVER_PORT=${CONFIG_SERVER_PORT}
+      - CERT_PASSWORD=${CERT_PASSWORD}
+    volumes:
+      - ../certs:/app/certs:ro
+    healthcheck:
+      test: [ "CMD", "curl", "-k", "--cert", "/app/certs/services/eureka-server/eureka-server.p12:${CERT_PASSWORD}", "--cert-type", "P12", "-f", "https://localhost:${EUREKA_PORT}/actuator/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      config-server:
+        condition: service_healthy
+    ports:
+      - "${EUREKA_PORT:-8761}:${EUREKA_PORT:-8761}"
+    networks:
+      - transcendence-net
+
+  # == 3. Core Authentication Service (Internal Only) ==
+  auth-service:
+    build:
+      context: ../services/auth-service
+      dockerfile: Dockerfile
+    image: transcendence-auth-service:latest
+    container_name: auth-service
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - AUTH_SERVICE_PORT=${AUTH_SERVICE_PORT}
+      - CONFIG_SERVER_PORT=${CONFIG_SERVER_PORT}
+      - EUREKA_PORT=${EUREKA_PORT}
+      - CERT_PASSWORD=${CERT_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_PORT=5432
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_PORT=6379
+      - GATEWAY_PORT=${GATEWAY_PORT}
+    volumes:
+      - ../certs:/app/certs:ro
+    healthcheck:
+      test: [ "CMD", "curl", "-k", "--cert", "/app/certs/services/auth-service/auth-service.p12:${CERT_PASSWORD}", "--cert-type", "P12", "-f", "https://localhost:${AUTH_SERVICE_PORT}/actuator/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      config-server:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - transcendence-net
+
+  # == 4. Backend-For-Frontend (BFF) Gateway (Public Entrypoint) ==
+  gateway:
+    build:
+      context: ../services/gateway
+      dockerfile: Dockerfile
+    image: transcendence-gateway:latest
+    container_name: gateway
+    ports:
+      - "${GATEWAY_PORT}:${GATEWAY_PORT}" # ONLY the Gateway is exposed to the host system!
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - GATEWAY_PORT=${GATEWAY_PORT}
+      - CONFIG_SERVER_PORT=${CONFIG_SERVER_PORT}
+      - EUREKA_PORT=${EUREKA_PORT}
+      - CERT_PASSWORD=${CERT_PASSWORD}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_PORT=6379
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+      - FRONTEND_BASE_URL=${FRONTEND_BASE_URL:-http://localhost:5173}
+    volumes:
+      - ../certs:/app/certs:ro
+    healthcheck:
+      test: [ "CMD", "curl", "-k", "--cert", "/app/certs/services/gateway/gateway.p12:${CERT_PASSWORD}", "--cert-type", "P12", "-f", "https://localhost:${GATEWAY_PORT}/actuator/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      config-server:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+    networks:
+      - transcendence-net
+
+# == 7. Bridge Network Connectivity ==
+networks:
+  transcendence-net:
+    external: true
+
+
+
+```
+
+## 📄 File: ./scripts/build-all.sh
 ```bash
 #!/usr/bin/env bash
-# Records run_in_terminal and appmod-* tool calls as JSONL for the extension to process.
+set -euo pipefail
 
-INPUT=$(cat)
+# Establish root directory execution path (run from scripts/ folder or root)
+cd "$(dirname "$0")/.."
 
-TOOL_NAME="${INPUT#*\"tool_name\":\"}"
-TOOL_NAME="${TOOL_NAME%%\"*}"
+# ── Colors & Logging ──────────────────────────────────────────────────────────
+RED='\033[0;31m'; GRN='\033[0;32m'; YLW='\033[0;33m'
+BLU='\033[0;34m'; CYN='\033[0;36m'; BLD='\033[1m'; RST='\033[0m'
 
-case "$TOOL_NAME" in
-  run_in_terminal|appmod-*) ;;
-  *) exit 0 ;;
+info()  { echo -e "$(date '+%H:%M:%S') ${BLU}[INFO]${RST}  $*"; }
+ok()    { echo -e "$(date '+%H:%M:%S') ${GRN}[OK]${RST}    $*"; }
+warn()  { echo -e "$(date '+%H:%M:%S') ${YLW}[WARN]${RST}  $*"; }
+error() { echo -e "$(date '+%H:%M:%S') ${RED}[ERROR]${RST} $*" >&2; }
+step()  { echo -e "\n${BLD}${CYN}──── $* ────${RST}"; }
+
+step "Starting Project-Wide Compilation & Build"
+
+# 1. Build all backend services
+for svc_dir in services/*/; do
+    [[ -d "$svc_dir" ]] || continue
+    name=$(basename "$svc_dir")
+    
+    if [[ -f "${svc_dir}pom.xml" ]]; then
+        step "Building Backend: $name"
+        if [[ -x "${svc_dir}mvnw" ]]; then
+            info "[$name] Running './mvnw clean package -DskipTests'..."
+            "${svc_dir}mvnw" -f "${svc_dir}pom.xml" clean package -DskipTests --no-transfer-progress
+        elif command -v mvn >/dev/null 2>&1; then
+            info "[$name] Running 'mvn clean package -DskipTests'..."
+            mvn -f "${svc_dir}pom.xml" clean package -DskipTests --no-transfer-progress
+        else
+            error "[$name] Neither ./mvnw nor global mvn command was found. Cannot build!"
+            exit 1
+        fi
+        ok "[$name] Build compiled successfully!"
+    fi
+done
+
+# 2. Build frontend
+if [[ -d "services/frontend" ]]; then
+    step "Building Frontend: React App"
+    cd services/frontend
+    
+    if command -v npm >/dev/null 2>&1; then
+        if [[ ! -d "node_modules" ]]; then
+            info "[frontend] Installing node dependencies (npm install)..."
+            npm install --no-audit --no-fund
+        fi
+        info "[frontend] Compiling production build (npm run build)..."
+        npm run build
+        ok "[frontend] Production build compiled successfully!"
+    else
+        warn "[frontend] Node/NPM not found — skipping frontend build compilation."
+    fi
+    cd ../..
+fi
+
+step "All Services Built Successfully"
+echo -e "${GRN}Build validated. All microservices and frontend code compiled successfully.${RST}"
+
+```
+
+## 📄 File: ./scripts/clean.sh
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Establish root directory execution path (run from scripts/ folder or root)
+cd "$(dirname "$0")/.."
+
+# ── Colors & Logging ──────────────────────────────────────────────────────────
+RED='\033[0;31m'; GRN='\033[0;32m'; YLW='\033[0;33m'
+BLU='\033[0;34m'; CYN='\033[0;36m'; BLD='\033[1m'; RST='\033[0m'
+
+info()  { echo -e "$(date '+%H:%M:%S') ${BLU}[INFO]${RST}  $*"; }
+ok()    { echo -e "$(date '+%H:%M:%S') ${GRN}[OK]${RST}    $*"; }
+warn()  { echo -e "$(date '+%H:%M:%S') ${YLW}[WARN]${RST}  $*"; }
+error() { echo -e "$(date '+%H:%M:%S') ${RED}[ERROR]${RST} $*" >&2; }
+step()  { echo -e "\n${BLD}${CYN}──── $* ────${RST}"; }
+
+step "Starting Project Cleanup & Reset"
+
+# 1. Stop and tear down docker containers and volumes
+if command -v docker >/dev/null 2>&1; then
+    if [[ -f "docker/docker-compose.yml" ]]; then
+        info "Shutting down infrastructure containers and deleting volumes..."
+        docker compose -f docker/docker-compose.yml --env-file .env down -v --remove-orphans || warn "Failed to completely teardown infra containers."
+    fi
+    if [[ -f "docker/docker-compose.apps.yml" ]]; then
+        info "Shutting down application containers..."
+        docker compose -f docker/docker-compose.apps.yml --env-file .env down -v --remove-orphans || warn "Failed to completely teardown app containers."
+    fi
+    # Force remove any residual/conflicting containers by name to prevent project-rename conflicts
+    info "Force removing conflicting containers by name..."
+    docker rm -f postgres-db redis-container redis-commander rabbitmq config-server eureka-server auth-service gateway >/dev/null 2>&1 || true
+else
+    warn "Docker command not found — skipping container teardown."
+fi
+
+# 2. Clear certificates
+if [[ -d "certs" ]]; then
+    info "Removing generated SSL certificates and Root CA..."
+    rm -rf certs
+    ok "Deleted certs/ directory."
+fi
+
+# 3. Clear logs
+if [[ -d "logs" ]]; then
+    info "Clearing logs directory..."
+    rm -rf logs/*
+    ok "Logs directory cleared."
+fi
+
+# 4. Clean Maven build folders in services
+for svc_dir in services/*/; do
+    [[ -d "$svc_dir" ]] || continue
+    name=$(basename "$svc_dir")
+    
+    if [[ -f "${svc_dir}pom.xml" ]]; then
+        info "[$name] Running maven clean..."
+        if [[ -x "${svc_dir}mvnw" ]]; then
+            "${svc_dir}mvnw" -f "${svc_dir}pom.xml" clean --no-transfer-progress >/dev/null 2>&1 || warn "[$name] Maven clean failed."
+        elif command -v mvn >/dev/null 2>&1; then
+            mvn -f "${svc_dir}pom.xml" clean --no-transfer-progress >/dev/null 2>&1 || warn "[$name] Maven clean failed."
+        else
+            warn "[$name] Maven not found, removing target/ directory directly..."
+            rm -rf "${svc_dir}target"
+        fi
+        ok "[$name] Cleaned build targets."
+    fi
+done
+
+# 5. Clean Frontend build assets
+if [[ -d "services/frontend" ]]; then
+    info "[frontend] Removing build assets..."
+    rm -rf services/frontend/dist
+    rm -rf services/frontend/.vite
+    ok "[frontend] Cleaned build assets."
+fi
+
+step "Teardown & Cleanup Successful"
+echo -e "${GRN}Environment is fully reset. Run './scripts/mtls-setup.sh' to regenerate certificates.${RST}"
+
+```
+
+## 📄 File: ./scripts/docker.sh
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Establish root directory execution path (run from scripts/ folder or root)
+cd "$(dirname "$0")/.."
+
+# ── Colors & Logging ──────────────────────────────────────────────────────────
+RED='\033[0;31m'; GRN='\033[0;32m'; YLW='\033[0;33m'
+BLU='\033[0;34m'; CYN='\033[0;36m'; BLD='\033[1m'; RST='\033[0m'
+
+info()  { echo -e "$(date '+%H:%M:%S') ${BLU}[INFO]${RST}  $*"; }
+ok()    { echo -e "$(date '+%H:%M:%S') ${GRN}[OK]${RST}    $*"; }
+warn()  { echo -e "$(date '+%H:%M:%S') ${YLW}[WARN]${RST}  $*"; }
+error() { echo -e "$(date '+%H:%M:%S') ${RED}[ERROR]${RST} $*" >&2; }
+step()  { echo -e "\n${BLD}${CYN}──── $* ────${RST}"; }
+
+# Compose Files configurations
+INFRA_COMPOSE="docker/docker-compose.yml"
+APPS_COMPOSE="docker/docker-compose.apps.yml"
+
+usage() {
+    echo "Usage: $0 [command] [options]"
+    echo ""
+    echo "Commands:"
+    echo "  up             Start the entire cluster (infra first, then apps)"
+    echo "  down           Stop the entire cluster and remove volumes"
+    echo "  infra          Start only the infrastructure stack (db, redis, rabbitmq)"
+    echo "  apps           Start only the application microservices"
+    echo "  restart <svc>  Restart and rebuild a specific microservice container"
+    echo "  logs [svc]     Tail logs (for all containers or a specific one)"
+    echo "  ps             Show the running status and health of all containers"
+    echo ""
+    echo "Examples:"
+    echo "  $0 up"
+    echo "  $0 restart auth-service"
+    echo "  $0 logs gateway"
+}
+
+# Ensure .env symlink exists
+check_env_symlink() {
+    if [[ ! -f ".env" ]]; then
+        error "Root .env file is missing. Please create it first."
+        exit 1
+    fi
+    if [[ ! -f "docker/.env" ]]; then
+        info "Creating missing symbolic link docker/.env -> ../.env"
+        ln -sf ../.env docker/.env
+    fi
+}
+
+remove_conflicts() {
+    info "Purging potential container name conflicts..."
+    docker rm -f postgres-db redis-container redis-commander rabbitmq config-server eureka-server auth-service gateway >/dev/null 2>&1 || true
+}
+
+wait_for_infra() {
+    step "Waiting for Infrastructure Readiness"
+    local required=("postgres-db" "redis-container")
+    
+    for container in "${required[@]}"; do
+        local elapsed=0
+        local timeout=45
+        info "Checking health of $container..."
+        while true; do
+            local status
+            status=$(docker inspect -f '{{.State.Health.Status}}' "$container" 2>/dev/null || echo "missing")
+            if [[ "$status" == "healthy" ]]; then
+                ok "$container is healthy."
+                break
+            fi
+            sleep 2
+            elapsed=$(( elapsed + 2 ))
+            if (( elapsed >= timeout )); then
+                warn "$container health check timed out. Continuing anyway..."
+                break
+            fi
+        done
+    done
+}
+
+case "${1:-}" in
+    up)
+        check_env_symlink
+        remove_conflicts
+        step "Starting Infrastructure Stack"
+        docker compose -f "$INFRA_COMPOSE" up -d
+        
+        wait_for_infra
+        
+        step "Starting Applications Stack"
+        docker compose -f "$APPS_COMPOSE" up -d --build
+        ok "Entire cluster started."
+        ;;
+        
+    down)
+        check_env_symlink
+        step "Tearing Down Cluster"
+        docker compose -f "$APPS_COMPOSE" down -v --remove-orphans
+        docker compose -f "$INFRA_COMPOSE" down -v --remove-orphans
+        remove_conflicts
+        ok "Cluster stopped."
+        ;;
+        
+    infra)
+        check_env_symlink
+        remove_conflicts
+        step "Starting Infrastructure Stack Only"
+        docker compose -f "$INFRA_COMPOSE" up -d
+        ;;
+        
+    apps)
+        check_env_symlink
+        docker rm -f config-server eureka-server auth-service gateway >/dev/null 2>&1 || true
+        step "Starting Applications Stack Only"
+        docker compose -f "$APPS_COMPOSE" up -d --build
+        ;;
+        
+    restart)
+        check_env_symlink
+        shift
+        if [[ $# -eq 0 ]]; then
+            error "Please specify a service to restart (e.g. gateway, auth-service)"
+            exit 1
+        fi
+        svc="$1"
+        step "Restarting & Rebuilding Service: $svc"
+        
+        # Check if service belongs to infra or apps
+        if docker compose -f "$APPS_COMPOSE" ps --format json | grep -q "\"Service\":\"$svc\""; then
+            docker compose -f "$APPS_COMPOSE" up -d --build "$svc"
+        elif docker compose -f "$INFRA_COMPOSE" ps --format json | grep -q "\"Service\":\"$svc\""; then
+            docker compose -f "$INFRA_COMPOSE" restart "$svc"
+        else
+            error "Service '$svc' not found in compose configurations."
+            exit 1
+        fi
+        ok "$svc restarted successfully."
+        ;;
+        
+    logs)
+        check_env_symlink
+        shift
+        if [[ $# -eq 0 ]]; then
+            # Tail everything
+            docker compose -f "$INFRA_COMPOSE" -f "$APPS_COMPOSE" logs -f --tail=100
+        else
+            svc="$1"
+            if docker compose -f "$APPS_COMPOSE" ps --format json | grep -q "\"Service\":\"$svc\""; then
+                docker compose -f "$APPS_COMPOSE" logs -f --tail=100 "$svc"
+            elif docker compose -f "$INFRA_COMPOSE" ps --format json | grep -q "\"Service\":\"$svc\""; then
+                docker compose -f "$INFRA_COMPOSE" logs -f --tail=100 "$svc"
+            else
+                error "Service '$svc' not found."
+                exit 1
+            fi
+        fi
+        ;;
+        
+    ps|status)
+        check_env_symlink
+        step "Current Cluster Status"
+        docker compose -f "$INFRA_COMPOSE" -f "$APPS_COMPOSE" ps
+        ;;
+        
+    *)
+        usage
+        exit 1
+        ;;
 esac
 
-case "$INPUT" in
-  *'"session_id":"'*) ;;
-  *) exit 0 ;;
+```
+
+## 📄 File: ./scripts/frontend.sh
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Establish path to services/frontend relative to this script's directory
+FRONTEND_DIR="$(dirname "$0")/../services/frontend"
+
+# ── Colors & Logging ──────────────────────────────────────────────────────────
+RED='\033[0;31m'; GRN='\033[0;32m'; YLW='\033[0;33m'
+BLU='\033[0;34m'; CYN='\033[0;36m'; BLD='\033[1m'; RST='\033[0m'
+
+info()  { echo -e "$(date '+%H:%M:%S') ${BLU}[INFO]${RST}  $*"; }
+ok()    { echo -e "$(date '+%H:%M:%S') ${GRN}[OK]${RST}    $*"; }
+warn()  { echo -e "$(date '+%H:%M:%S') ${YLW}[WARN]${RST}  $*"; }
+error() { echo -e "$(date '+%H:%M:%S') ${RED}[ERROR]${RST} $*" >&2; }
+step()  { echo -e "\n${BLD}${CYN}──── $* ────${RST}"; }
+
+usage() {
+    echo "Usage: $0 [command]"
+    echo ""
+    echo "Commands:"
+    echo "  (none) / dev   Start Vite development server"
+    echo "  build          Build production assets"
+    echo "  install        Install dependencies (npm install)"
+    echo "  clean          Force-reinstall dependencies (wipes node_modules & lockfile)"
+}
+
+cmd="${1:-dev}"
+
+# Verify services/frontend folder exists
+if [[ ! -d "$FRONTEND_DIR" ]]; then
+    error "Frontend directory not found at: $FRONTEND_DIR"
+    exit 1
+fi
+
+case "$cmd" in
+    dev|start)
+        step "Starting Frontend Dev Server (Vite)"
+        cd "$FRONTEND_DIR"
+        if [[ ! -d "node_modules" ]]; then
+            info "node_modules not found, installing dependencies first..."
+            npm install
+        fi
+        exec npm run dev
+        ;;
+        
+    build)
+        step "Compiling Frontend Production Assets"
+        cd "$FRONTEND_DIR"
+        exec npm run build
+        ;;
+        
+    install)
+        step "Installing Frontend Dependencies"
+        cd "$FRONTEND_DIR"
+        exec npm install
+        ;;
+        
+    clean)
+        step "Resetting & Reinstalling Frontend Dependencies"
+        cd "$FRONTEND_DIR"
+        info "Wiping node_modules, package-lock.json and dist..."
+        rm -rf node_modules package-lock.json dist .vite
+        ok "Cleaned existing assets."
+        info "Running npm install..."
+        exec npm install
+        ;;
+        
+    help|-h|--help)
+        usage
+        ;;
+        
+    *)
+        error "Unknown command: $cmd"
+        usage
+        exit 1
+        ;;
 esac
 
-SESSION_ID="${INPUT#*\"session_id\":\"}"
-SESSION_ID="${SESSION_ID%%\"*}"
-[ -z "$SESSION_ID" ] && exit 0
+```
 
-HOOKS_DIR=".github/modernize/java-upgrade/hooks"
-mkdir -p "$HOOKS_DIR"
+## 📄 File: ./scripts/generate-ai-context.sh
+```bash
+#!/usr/bin/env bash
 
-LINE=$(printf '%s' "$INPUT" | tr -d '\r\n')
-printf '%s\n' "$LINE" >> "$HOOKS_DIR/${SESSION_ID}.json"
+# Establish root directory execution path (run from scripts/ folder or root)
+cd "$(dirname "$0")/.."
+
+# ==============================================================================
+# 🚀 AI CONTEXT GENERATOR - TOKEN OPTIMIZER
+# ==============================================================================
+# This script scans your microservices and frontend workspace, filters out
+# generated code, external libraries, secrets, and binary assets, and combines
+# your actual hand-written source code into a single, clean Markdown file.
+#
+# Usage:
+#   chmod +x generate-ai-context.sh
+#   ./generate-ai-context.sh
+# ==============================================================================
+
+OUTPUT_FILE="project_codebase_context.md"
+
+# Clear previous output
+echo "" > "$OUTPUT_FILE"
+
+echo "===================================================="
+echo "🔍 Scanning workspace for source files..."
+echo "===================================================="
+
+# Temporary file to store file list
+TEMP_LIST=$(mktemp)
+
+# Find relevant files, ignoring bulky dependencies, binary builds, and secrets
+find . -type f \
+  ! -path "*/node_modules/*" \
+  ! -path "*/target/*" \
+  ! -path "*/.git/*" \
+  ! -path "*/.idea/*" \
+  ! -path "*/.vscode/*" \
+  ! -path "*/certs/*" \
+  ! -path "*/dist/*" \
+  ! -path "*/build/*" \
+  ! -name "*.p12" \
+  ! -name "*.pem" \
+  ! -name "*.key" \
+  ! -name "*.crt" \
+  ! -name "*.jks" \
+  ! -name "*.png" \
+  ! -name "*.jpg" \
+  ! -name "*.jpeg" \
+  ! -name "*.gif" \
+  ! -name "*.ico" \
+  ! -name "*.woff*" \
+  ! -name "*.ttf" \
+  ! -name "package-lock.json" \
+  ! -name "yarn.lock" \
+  ! -name "pnpm-lock.yaml" \
+  ! -name "$OUTPUT_FILE" \
+  \( \
+     -name "*.java" \
+     -o -name "*.jsx" \
+     -o -name "*.js" \
+     -o -name "*.ts" \
+     -o -name "*.tsx" \
+     -o -name "*.css" \
+     -o -name "*.html" \
+     -o -name "*.xml" \
+     -o -name "*.yaml" \
+     -o -name "*.yml" \
+     -o -name "*.properties" \
+     -o -name "*.sh" \
+     -o -name "*.env*" \
+     -o -name "Dockerfile" \
+     -o -name "docker-compose*" \
+  \) > "$TEMP_LIST"
+
+TOTAL_FILES=$(wc -l < "$TEMP_LIST" | xargs)
+echo "Found $TOTAL_FILES relevant source code files!"
+echo "Bundling files into $OUTPUT_FILE..."
+
+# Write Markdown Header
+cat << 'EOF' >> "$OUTPUT_FILE"
+# 📦 TRANSCENDENCE MICROSERVICES CONTEXT
+
+This single document contains the handwritten source code of the Transcendence Microservices Stack. It is optimized to be highly token-efficient for AI context ingestion.
+
+## 🗂️ Project Structure Summary
+EOF
+
+# Append directory layout
+echo "Generating directory summary..."
+echo '```' >> "$OUTPUT_FILE"
+find . -maxdepth 3 \
+  ! -path "*/node_modules*" \
+  ! -path "*/target*" \
+  ! -path "*/.git*" \
+  ! -path "*/.idea*" \
+  ! -path "*/.vscode*" \
+  ! -path "*/certs*" \
+  ! -path "*/dist*" \
+  ! -path "*/build*" \
+  -not -name "." | sort | sed -e 's;[^/]*/;|____;g;s;____|; |;g' >> "$OUTPUT_FILE"
+echo '```' >> "$OUTPUT_FILE"
+echo "" >> "$OUTPUT_FILE"
+
+# Process each file
+CURRENT_COUNT=0
+while IFS= read -r file; do
+  ((CURRENT_COUNT++))
+  
+  # Determine markdown syntax highlighting language
+  ext="${file##*.}"
+  lang="text"
+  case "$ext" in
+    java) lang="java" ;;
+    jsx|js) lang="javascript" ;;
+    tsx|ts) lang="typescript" ;;
+    xml) lang="xml" ;;
+    yaml|yml) lang="yaml" ;;
+    css) lang="css" ;;
+    html) lang="html" ;;
+    sh) lang="bash" ;;
+    properties) lang="properties" ;;
+  esac
+  
+  if [[ "$file" == *"Dockerfile"* ]]; then
+    lang="dockerfile"
+  elif [[ "$file" == *".env"* ]]; then
+    lang="properties"
+  fi
+
+  # Append file context
+  echo "📄 Adding [$CURRENT_COUNT/$TOTAL_FILES]: $file"
+  
+  echo "## 📄 File: $file" >> "$OUTPUT_FILE"
+  echo '```'"$lang" >> "$OUTPUT_FILE"
+  cat "$file" >> "$OUTPUT_FILE"
+  echo "" >> "$OUTPUT_FILE"
+  echo '```' >> "$OUTPUT_FILE"
+  echo "" >> "$OUTPUT_FILE"
+
+done < "$TEMP_LIST"
+
+rm "$TEMP_LIST"
+
+echo "===================================================="
+echo "🎉 SUCCESS! Single context file generated:"
+echo "📂 $OUTPUT_FILE"
+echo "===================================================="
+
+```
+
+## 📄 File: ./scripts/mtls-setup.sh
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Establish root directory execution path (run from scripts/ folder or root)
+cd "$(dirname "$0")/.."
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Transcendence — mTLS Certificate Manager
+#
+#  Usage:
+#    ./mtls-setup.sh                        # bootstrap + generate all services
+#    ./mtls-setup.sh add <name> [name...]   # add one or more services
+#    ./mtls-setup.sh remove <name> [name…] # remove one or more services
+#    ./mtls-setup.sh renew <name> [name…]  # force-renew specific services
+#    ./mtls-setup.sh renew --all            # force-renew every service
+#    ./mtls-setup.sh status                 # show cert inventory + expiry
+#    ./mtls-setup.sh list                   # list registered services
+#
+#  Layout produced (under CERT_DIR):
+#    certs/
+#    ├── rootCA/
+#    │   ├── rootCA.key          private key  (600)
+#    │   ├── rootCA.crt          certificate  (644)
+#    │   └── rootCA.srl          serial file
+#    ├── truststore/
+#    │   └── truststore.p12      Java truststore (644)
+#    ├── jwt/
+#    │   ├── jwt_private_pkcs8.pem   Gateway only (600)
+#    │   └── jwt_public.pem          Distribute everywhere (644)
+#    └── services/
+#        └── <service-name>/
+#            ├── <name>.key      raw private key (600)
+#            ├── <name>.crt      signed certificate (644)
+#            ├── <name>.pem      fullchain PEM (cert + key) (600)
+#            ├── <name>.p12      PKCS12 keystore (644)
+#            ├── <name>-chain.pem  cert + CA chain (no key) (644)
+#            └── README.txt      usage guide per service
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Configuration ─────────────────────────────────────────────────────────────
+CERT_DIR="${CERT_DIR:-certs}"
+CERT_PASS="${CERT_PASSWORD:-password}"
+DAYS_VALID="${DAYS_VALID:-365}"
+DAYS_CA="${DAYS_CA:-3650}"
+CA_CN="${CA_CN:-TranscendenceCA}"
+
+# Default services generated on first run (edit freely)
+DEFAULT_SERVICES=(
+    "gateway"
+    "auth-service"
+    "config-server"
+    "eureka-server"
+)
+
+# ── Colour helpers ─────────────────────────────────────────────────────────────
+RED='\033[0;31m'; GRN='\033[0;32m'; YLW='\033[0;33m'
+BLU='\033[0;34m'; CYN='\033[0;36m'; GRY='\033[0;90m'
+BLD='\033[1m'; RST='\033[0m'
+
+info()    { echo -e "${BLU}[INFO]${RST}  $*"; }
+ok()      { echo -e "${GRN}[OK]${RST}    $*"; }
+warn()    { echo -e "${YLW}[WARN]${RST}  $*"; }
+error()   { echo -e "${RED}[ERROR]${RST} $*" >&2; }
+step()    { echo -e "\n${BLD}${CYN}──── $* ────${RST}"; }
+dim()     { echo -e "${GRY}$*${RST}"; }
+
+banner() {
+    echo -e "${BLD}"
+    echo "╔══════════════════════════════════════════════════╗"
+    echo "║   Transcendence  ·  mTLS Certificate Manager    ║"
+    echo "╚══════════════════════════════════════════════════╝"
+    echo -e "${RST}"
+}
+
+# ── Directory helpers ──────────────────────────────────────────────────────────
+ca_dir()         { echo "$CERT_DIR/rootCA"; }
+trust_dir()      { echo "$CERT_DIR/truststore"; }
+jwt_dir()        { echo "$CERT_DIR/jwt"; }
+svc_dir()        { echo "$CERT_DIR/services/$1"; }
+services_root()  { echo "$CERT_DIR/services"; }
+
+ensure_dirs() {
+    mkdir -p "$(ca_dir)" "$(trust_dir)" "$(jwt_dir)" "$(services_root)"
+}
+
+# ── CA ─────────────────────────────────────────────────────────────────────────
+generate_ca() {
+    local ca_key="$(ca_dir)/rootCA.key"
+    local ca_crt="$(ca_dir)/rootCA.crt"
+
+    if [[ -f "$ca_key" && -f "$ca_crt" ]]; then
+        ok "Root CA already exists — skipping"
+        return
+    fi
+
+    step "Creating Root CA"
+    openssl req -x509 -nodes -newkey rsa:4096 \
+        -keyout "$ca_key" \
+        -out    "$ca_crt" \
+        -days   "$DAYS_CA" \
+        -subj   "/CN=${CA_CN}/O=Transcendence/OU=Infrastructure"
+
+    chmod 600 "$ca_key"
+    chmod 644 "$ca_crt"
+    ok "Root CA created → $(ca_dir)/"
+}
+
+# ── Truststore ─────────────────────────────────────────────────────────────────
+generate_truststore() {
+    local ts="$(trust_dir)/truststore.p12"
+    local ca_crt="$(ca_dir)/rootCA.crt"
+
+    # Rebuild whenever the CA cert is newer than the truststore
+    if [[ -f "$ts" && "$ca_crt" -ot "$ts" ]]; then
+        ok "Truststore is current — skipping"
+        return
+    fi
+
+    step "Rebuilding Java Truststore"
+    rm -f "$ts"
+    keytool -import -trustcacerts \
+        -alias   rootca \
+        -file    "$ca_crt" \
+        -keystore "$ts" \
+        -storetype PKCS12 \
+        -storepass "$CERT_PASS" \
+        -noprompt
+
+    chmod 644 "$ts"
+    ok "Truststore → $(trust_dir)/truststore.p12"
+}
+
+# ── JWT keys ───────────────────────────────────────────────────────────────────
+generate_jwt_keys() {
+    local priv="$(jwt_dir)/jwt_private_pkcs8.pem"
+    local pub="$(jwt_dir)/jwt_public.pem"
+
+    if [[ -f "$priv" && -f "$pub" ]]; then
+        ok "JWT key pair already exists — skipping"
+        return
+    fi
+
+    step "Generating RSA Key Pair for JWT"
+    local tmp
+    tmp="$(mktemp)"
+    openssl genrsa -out "$tmp" 2048
+
+    # PKCS#8 private (Spring Security / KeyFactory compatible)
+    openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt \
+        -in "$tmp" -out "$priv"
+
+    # X.509 public key
+    openssl rsa -in "$tmp" -pubout -out "$pub"
+
+    rm -f "$tmp"
+    chmod 600 "$priv"
+    chmod 644 "$pub"
+    ok "JWT keys → $(jwt_dir)/"
+}
+
+# ── Per-service certificate generation ────────────────────────────────────────
+#
+#  Outputs for <name>  (all inside services/<name>/):
+#    <name>.key           RSA private key              (600 — keep private)
+#    <name>.crt           Signed certificate           (644)
+#    <name>.pem           Full-chain PEM  key+cert     (600 — nginx/HAProxy)
+#    <name>-chain.pem     cert+CA bundle  (no key)     (644 — client trust)
+#    <name>.p12           PKCS12 keystore              (644 — Spring Boot)
+#    README.txt           Spring props + usage hints
+#
+generate_service_cert() {
+    local name="$1"
+    local force="${2:-no}"          # pass "force" to renew
+    local dir
+    dir="$(svc_dir "$name")"
+    local p12="$dir/$name.p12"
+
+    if [[ "$force" != "force" && -f "$p12" ]]; then
+        # Check if it's actually expired
+        local expiry
+        expiry=$(openssl pkcs12 -in "$p12" -passin pass:"$CERT_PASS" -nokeys 2>/dev/null \
+                  | openssl x509 -noout -enddate 2>/dev/null \
+                  | cut -d= -f2 || echo "unknown")
+        if [[ "$expiry" != "unknown" ]]; then
+            local exp_epoch
+            exp_epoch=$(date -d "$expiry" +%s 2>/dev/null || date -j -f "%b %d %T %Y %Z" "$expiry" +%s 2>/dev/null || echo 0)
+            local now_epoch
+            now_epoch=$(date +%s)
+            if (( exp_epoch > now_epoch )); then
+                ok "[$name] certificate valid until $(date -d @$exp_epoch '+%Y-%m-%d' 2>/dev/null || echo $expiry) — skipping"
+                return
+            else
+                warn "[$name] certificate is EXPIRED — regenerating"
+            fi
+        else
+            ok "[$name] certificate exists — skipping (run 'renew $name' to force)"
+            return
+        fi
+    fi
+
+    info "[$name] Generating certificate package..."
+    mkdir -p "$dir"
+
+    local ca_key="$(ca_dir)/rootCA.key"
+    local ca_crt="$(ca_dir)/rootCA.crt"
+    local key="$dir/$name.key"
+    local csr="$dir/$name.csr"
+    local crt="$dir/$name.crt"
+    local pem="$dir/$name.pem"
+    local chain="$dir/$name-chain.pem"
+    local p12="$dir/$name.p12"
+    local ext_file="$dir/$name.ext"
+
+    # SAN extension — always includes localhost variants + the service name
+    cat > "$ext_file" <<EOF
+[req]
+distinguished_name = req_distinguished_name
+req_extensions     = v3_req
+prompt             = no
+
+[req_distinguished_name]
+CN = $name
+
+[v3_req]
+keyUsage         = keyEncipherment, dataEncipherment, digitalSignature
+extendedKeyUsage = serverAuth, clientAuth
+subjectAltName   = @alt_names
+
+[alt_names]
+DNS.1 = $name
+DNS.2 = localhost
+DNS.3 = 127.0.0.1
+IP.1  = 127.0.0.1
+EOF
+
+    # 1. Private key
+    openssl genrsa -out "$key" 2048 2>/dev/null
+
+    # 2. CSR
+    openssl req -new \
+        -key  "$key" \
+        -out  "$csr" \
+        -subj "/CN=$name/O=Transcendence/OU=Service" \
+        -config "$ext_file"
+
+    # 3. Sign with CA
+    openssl x509 -req \
+        -in      "$csr" \
+        -CA      "$ca_crt" \
+        -CAkey   "$ca_key" \
+        -CAcreateserial \
+        -out     "$crt" \
+        -days    "$DAYS_VALID" \
+        -extensions v3_req \
+        -extfile "$ext_file"
+
+    # 4. Full-chain PEM (key + cert) — for nginx, HAProxy, raw TLS
+    cat "$key" "$crt" > "$pem"
+
+    # 5. Chain PEM (cert + CA, no key) — share with clients for trust
+    cat "$crt" "$ca_crt" > "$chain"
+
+    # 6. PKCS12 keystore — for Spring Boot server.ssl.*
+    openssl pkcs12 -export \
+        -in      "$crt" \
+        -inkey   "$key" \
+        -CAfile  "$ca_crt" \
+        -caname  rootca \
+        -out     "$p12" \
+        -name    "$name" \
+        -password pass:"$CERT_PASS"
+
+    # 7. Permissions
+    chmod 600 "$key" "$pem"
+    chmod 644 "$crt" "$chain" "$p12"
+
+    # 8. Cleanup temporaries
+    rm -f "$csr" "$ext_file"
+
+    # 9. README for this service
+    write_service_readme "$name" "$dir"
+
+    ok "[$name] → $dir/"
+    dim "         .key  private key   (600 — do not distribute)"
+    dim "         .crt  certificate   (644)"
+    dim "         .pem  key+cert      (600 — nginx/HAProxy)"
+    dim "         -chain.pem cert+CA  (644 — client trust)"
+    dim "         .p12  PKCS12        (644 — Spring Boot)"
+}
+
+# ── Per-service README ─────────────────────────────────────────────────────────
+write_service_readme() {
+    local name="$1"
+    local dir="$2"
+    cat > "$dir/README.txt" <<EOF
+Certificate Package: $name
+Generated: $(date -u '+%Y-%m-%d %H:%M UTC')
+Valid for: $DAYS_VALID days
+CA: $CA_CN
+
+FILES
+─────
+$name.key          RSA private key      — DO NOT DISTRIBUTE (chmod 600)
+$name.crt          Signed certificate   — safe to distribute
+$name.pem          key + cert bundle    — nginx, HAProxy, raw TLS (chmod 600)
+$name-chain.pem    cert + CA bundle     — give to clients for mutual TLS trust
+$name.p12          PKCS12 keystore      — Spring Boot server.ssl.*
+
+SPRING BOOT APPLICATION.YML (server-side TLS)
+──────────────────────────────────────────────
+server:
+  ssl:
+    enabled: true
+    key-store:             classpath:$name.p12
+    key-store-password:    \${CERT_PASSWORD:$CERT_PASS}
+    key-store-type:        PKCS12
+    key-alias:             $name
+    trust-store:           classpath:truststore.p12
+    trust-store-password:  \${CERT_PASSWORD:$CERT_PASS}
+    trust-store-type:      PKCS12
+    client-auth:           need              # mTLS: require client certs
+
+SPRING CLOUD GATEWAY (reactive, for mTLS outbound to services)
+───────────────────────────────────────────────────────────────
+spring:
+  cloud:
+    gateway:
+      httpclient:
+        ssl:
+          use-insecure-trust-manager: false
+          trusted-x509-certificates:
+            - classpath:rootCA.crt
+
+FEIGN / REST TEMPLATE CLIENT mTLS
+───────────────────────────────────
+# Add the .p12 as key-store AND the truststore.p12 as trust-store
+# on any outbound HTTP client that calls a service behind mTLS.
+
+EUREKA CLIENT
+─────────────
+eureka:
+  client:
+    service-url:
+      defaultZone: https://eureka-server:8761/eureka/
+  instance:
+    secure-port-enabled: true
+    non-secure-port-enabled: false
+EOF
+}
+
+# ── Status / inventory ─────────────────────────────────────────────────────────
+cmd_status() {
+    banner
+    echo -e "${BLD}Certificate Inventory${RST}"
+    echo "────────────────────────────────────────────────────"
+
+    # Root CA
+    local ca_crt="$(ca_dir)/rootCA.crt"
+    if [[ -f "$ca_crt" ]]; then
+        local exp
+        exp=$(openssl x509 -noout -enddate -in "$ca_crt" 2>/dev/null | cut -d= -f2)
+        echo -e "  ${BLD}Root CA${RST}          expires ${exp}"
+    else
+        warn "  Root CA not found"
+    fi
+
+    # Truststore
+    local ts="$(trust_dir)/truststore.p12"
+    [[ -f "$ts" ]] && echo -e "  ${BLD}Truststore${RST}       ✓ present" || warn "  Truststore missing"
+
+    # JWT
+    local jwt_priv="$(jwt_dir)/jwt_private_pkcs8.pem"
+    local jwt_pub="$(jwt_dir)/jwt_public.pem"
+    [[ -f "$jwt_priv" && -f "$jwt_pub" ]] \
+        && echo -e "  ${BLD}JWT keys${RST}         ✓ present" \
+        || warn "  JWT keys missing"
+
+    echo ""
+    echo -e "${BLD}Services${RST}"
+    echo "────────────────────────────────────────────────────"
+
+    local svc_root
+    svc_root="$(services_root)"
+    if [[ ! -d "$svc_root" ]] || [[ -z "$(ls -A "$svc_root" 2>/dev/null)" ]]; then
+        warn "  No service certificates found"
+        return
+    fi
+
+    local now_epoch
+    now_epoch=$(date +%s)
+    local warn_threshold=$(( now_epoch + 30*86400 ))   # warn if expiring in <30 days
+
+    printf "  %-22s %-12s %-28s %s\n" "SERVICE" "STATUS" "EXPIRES" "FORMATS"
+    echo "  $(printf '─%.0s' {1..70})"
+    for svc_path in "$svc_root"/*/; do
+        [[ -d "$svc_path" ]] || continue
+        local svc
+        svc=$(basename "$svc_path")
+        local p12="$svc_path/$svc.p12"
+
+        if [[ ! -f "$p12" ]]; then
+            printf "  %-22s ${RED}%-12s${RST}\n" "$svc" "MISSING"
+            continue
+        fi
+
+        local exp_str
+        exp_str=$(openssl pkcs12 -in "$p12" -passin pass:"$CERT_PASS" -nokeys 2>/dev/null \
+                  | openssl x509 -noout -enddate 2>/dev/null \
+                  | cut -d= -f2 || echo "unknown")
+
+        local status="${GRN}OK${RST}"
+        if [[ "$exp_str" != "unknown" ]]; then
+            local exp_epoch
+            exp_epoch=$(date -d "$exp_str" +%s 2>/dev/null \
+                     || date -j -f "%b %d %T %Y %Z" "$exp_str" +%s 2>/dev/null \
+                     || echo 0)
+            local human_exp
+            human_exp=$(date -d @"$exp_epoch" '+%Y-%m-%d' 2>/dev/null || echo "$exp_str")
+            if (( exp_epoch < now_epoch )); then
+                status="${RED}EXPIRED${RST}"
+            elif (( exp_epoch < warn_threshold )); then
+                status="${YLW}EXPIRING${RST}"
+            fi
+
+            # Which formats present
+            local formats=""
+            [[ -f "$svc_path/$svc.key"       ]] && formats+="key "
+            [[ -f "$svc_path/$svc.crt"       ]] && formats+="crt "
+            [[ -f "$svc_path/$svc.pem"       ]] && formats+="pem "
+            [[ -f "$svc_path/$svc-chain.pem" ]] && formats+="chain "
+            [[ -f "$svc_path/$svc.p12"       ]] && formats+="p12"
+
+            printf "  %-22s %-20b %-28s %s\n" "$svc" "$status" "$human_exp" "$formats"
+        else
+            printf "  %-22s %-20b %-28s\n" "$svc" "${YLW}UNKNOWN${RST}" "—"
+        fi
+    done
+    echo ""
+}
+
+# ── List services ──────────────────────────────────────────────────────────────
+cmd_list() {
+    local svc_root
+    svc_root="$(services_root)"
+    if [[ ! -d "$svc_root" ]] || [[ -z "$(ls -A "$svc_root" 2>/dev/null)" ]]; then
+        info "No services registered yet"
+        return
+    fi
+    echo "Registered services:"
+    for svc_path in "$svc_root"/*/; do
+        [[ -d "$svc_path" ]] && echo "  • $(basename "$svc_path")"
+    done
+}
+
+# ── Remove service ─────────────────────────────────────────────────────────────
+cmd_remove() {
+    if [[ $# -eq 0 ]]; then
+        error "Usage: $0 remove <service> [service...]"
+        exit 1
+    fi
+    for name in "$@"; do
+        local dir
+        dir="$(svc_dir "$name")"
+        if [[ -d "$dir" ]]; then
+            rm -rf "$dir"
+            ok "Removed $name"
+        else
+            warn "$name — not found (nothing to remove)"
+        fi
+    done
+}
+
+# ── Renew service(s) ───────────────────────────────────────────────────────────
+cmd_renew() {
+    if [[ $# -eq 0 ]]; then
+        error "Usage: $0 renew <service|--all> [service...]"
+        exit 1
+    fi
+
+    if [[ "$1" == "--all" ]]; then
+        local svc_root
+        svc_root="$(services_root)"
+        if [[ ! -d "$svc_root" ]]; then
+            warn "No services directory found"
+            return
+        fi
+        for svc_path in "$svc_root"/*/; do
+            [[ -d "$svc_path" ]] || continue
+            generate_service_cert "$(basename "$svc_path")" "force"
+        done
+    else
+        for name in "$@"; do
+            generate_service_cert "$name" "force"
+        done
+    fi
+}
+
+# ── Add service(s) ────────────────────────────────────────────────────────────
+cmd_add() {
+    if [[ $# -eq 0 ]]; then
+        error "Usage: $0 add <service> [service...]"
+        exit 1
+    fi
+    # Ensure CA exists before generating service certs
+    ensure_dirs
+    generate_ca
+    generate_truststore
+
+    for name in "$@"; do
+        generate_service_cert "$name"
+    done
+}
+
+# ── Bootstrap (default: run everything for DEFAULT_SERVICES) ──────────────────
+cmd_bootstrap() {
+    banner
+    ensure_dirs
+    generate_ca
+    generate_truststore
+    generate_jwt_keys
+
+    step "Service Certificates"
+    for svc in "${DEFAULT_SERVICES[@]}"; do
+        generate_service_cert "$svc"
+    done
+
+    echo ""
+    echo -e "${BLD}${GRN}╔══════════════════════════════════════════════════╗${RST}"
+    echo -e "${BLD}${GRN}║            All certificates ready ✓              ║${RST}"
+    echo -e "${BLD}${GRN}╚══════════════════════════════════════════════════╝${RST}"
+    echo ""
+    echo -e "  ${BLD}Keystore password:${RST}  ${CERT_PASS}"
+    echo -e "  ${BLD}Certificate root:${RST}   ${CERT_DIR}/"
+    echo ""
+    echo "  Files to copy into each service's src/main/resources/:"
+    echo "    • services/<name>/<name>.p12     (its own keystore)"
+    echo "    • truststore/truststore.p12      (shared CA trust)"
+    echo "    • rootCA/rootCA.crt              (raw CA cert)"
+    echo ""
+    echo "  JWT keys:"
+    echo "    • jwt/jwt_private_pkcs8.pem      → gateway only"
+    echo "    • jwt/jwt_public.pem             → every resource server"
+    echo ""
+    echo "  Run './mtls-setup.sh status' to verify the full inventory."
+    echo ""
+}
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+CMD="${1:-bootstrap}"
+
+case "$CMD" in
+    bootstrap|"")    cmd_bootstrap ;;
+    add)             shift; cmd_add "$@" ;;
+    remove|rm)       shift; cmd_remove "$@" ;;
+    renew)           shift; cmd_renew "$@" ;;
+    status)          cmd_status ;;
+    list|ls)         cmd_list ;;
+    help|-h|--help)
+        echo "Usage: $0 [command] [args]"
+        echo ""
+        echo "Commands:"
+        echo "  (none)             Bootstrap: CA + truststore + JWT + default services"
+        echo "  add <name...>      Add one or more service cert packages"
+        echo "  remove <name...>   Remove service cert directories"
+        echo "  renew <name...>    Force-renew specific service certs"
+        echo "  renew --all        Force-renew all service certs"
+        echo "  status             Show cert inventory with expiry dates"
+        echo "  list               List registered services"
+        echo ""
+        echo "Environment:"
+        echo "  CERT_DIR       Output directory        (default: certs)"
+        echo "  CERT_PASSWORD  Keystore password        (default: changeit)"
+        echo "  DAYS_VALID     Service cert lifetime    (default: 365)"
+        echo "  DAYS_CA        Root CA lifetime         (default: 3650)"
+        echo "  CA_CN          CA common name           (default: TranscendenceCA)"
+        ;;
+    *)
+        error "Unknown command: $CMD"
+        echo "Run '$0 help' for usage."
+        exit 1
+        ;;
+esac
+```
+
+## 📄 File: ./scripts/register-service.sh
+```bash
+#!/usr/bin/env bash
+# ==============================================================================
+# TRANSCENDENCE SERVICE REGISTRATION UTILITY
+# ==============================================================================
+# Automates new microservice instantiation, mTLS cert generation,
+# routing mapping injection, docker-compose inclusion, and dynamic Gateway refresh.
+# ==============================================================================
+
+set -euo pipefail
+
+# Directories
+WORKSPACE_DIR="/home/laxuard/1337/Microservices"
+SERVICES_DIR="$WORKSPACE_DIR/services"
+TEMPLATES_DIR="$WORKSPACE_DIR/templates"
+SCRIPTS_DIR="$WORKSPACE_DIR/scripts"
+GATEWAY_CONFIG="$WORKSPACE_DIR/config/config-repo/gateway/gateway.yaml"
+APPS_COMPOSE="$WORKSPACE_DIR/docker/docker-compose.apps.yml"
+
+# Colors & Styles
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+BOLD='\033[1m'
+NC='\033[0;37m'
+
+info() { echo -e "${BLUE}${BOLD}[INFO]${NC}  $1"; }
+ok() { echo -e "${GREEN}${BOLD}[OK]${NC}    $1"; }
+warn() { echo -e "${YELLOW}${BOLD}[WARN]${NC}  $1"; }
+error() { echo -e "${RED}${BOLD}[ERROR]${NC}  $1"; exit 1; }
+
+usage() {
+    echo -e "${BOLD}Usage:${NC} $0 <service-name> <template-type>"
+    echo -e "  ${BOLD}service-name:${NC}   Name of the service (e.g., billing-service, chat-service)"
+    echo -e "  ${BOLD}template-type:${NC}  Template type, either 'nodejs' or 'python'"
+    echo -e "\n${BOLD}Example:${NC}"
+    echo -e "  $0 billing-service python"
+    exit 1;
+}
+
+# 1. Parse Arguments
+if [ "$#" -ne 2 ]; then
+    usage
+fi
+
+SVC_NAME=$(echo "$1" | tr '[:upper:]' '[:lower:]')
+TEMPLATE_TYPE=$(echo "$2" | tr '[:upper:]' '[:lower:]')
+
+# Validate Template Type
+if [ "$TEMPLATE_TYPE" != "nodejs" ] && [ "$TEMPLATE_TYPE" != "python" ]; then
+    error "Invalid template type: '$TEMPLATE_TYPE'. Must be 'nodejs' or 'python'."
+fi
+
+# Validate Service Name Format (alphanumeric and hyphens only)
+if [[ ! "$SVC_NAME" =~ ^[a-z0-9-]+$ ]]; then
+    error "Invalid service name: '$SVC_NAME'. Only lowercase letters, numbers, and hyphens are allowed."
+fi
+
+echo -e "${PURPLE}${BOLD}🚀 Initiating Transcendence Service Provisioning: $SVC_NAME ($TEMPLATE_TYPE)${NC}"
+echo -e "----------------------------------------------------------------------"
+
+# 2. Check Directories & Overwrites
+TARGET_DIR="$SERVICES_DIR/$SVC_NAME"
+if [ -d "$TARGET_DIR" ]; then
+    error "Target directory '$TARGET_DIR' already exists. Aborting to prevent overwrite."
+fi
+
+# Define source template folder
+if [ "$TEMPLATE_TYPE" == "nodejs" ]; then
+    SRC_TEMPLATE="$TEMPLATES_DIR/nodejs-express"
+    INTERNAL_PORT=8083
+    HEALTHCHECK_CMD="[ \"CMD\", \"curl\", \"-k\", \"--cert\", \"/app/certs/services/$SVC_NAME/$SVC_NAME.p12:\${CERT_PASSWORD}\", \"--cert-type\", \"P12\", \"-f\", \"https://localhost:$INTERNAL_PORT/health\" ]"
+else
+    SRC_TEMPLATE="$TEMPLATES_DIR/python-fastapi"
+    INTERNAL_PORT=8082
+    HEALTHCHECK_CMD="[ \"CMD\", \"curl\", \"-k\", \"--cert\", \"/app/certs/services/$SVC_NAME/$SVC_NAME.crt\", \"--key\", \"/app/certs/services/$SVC_NAME/$SVC_NAME.key\", \"-f\", \"https://localhost:$INTERNAL_PORT/health\" ]"
+fi
+
+if [ ! -d "$SRC_TEMPLATE" ]; then
+    error "Source template '$SRC_TEMPLATE' does not exist."
+fi
+
+# 3. Copy Template Folder
+info "Copying '$TEMPLATE_TYPE' template to services/$SVC_NAME..."
+cp -r "$SRC_TEMPLATE" "$TARGET_DIR"
+ok "Service boilerplate provisioned at services/$SVC_NAME"
+
+# 4. Generate mTLS Certificates
+info "Generating mTLS credentials for $SVC_NAME..."
+if [ -f "$SCRIPTS_DIR/mtls-setup.sh" ]; then
+    "$SCRIPTS_DIR/mtls-setup.sh" add "$SVC_NAME"
+    ok "mTLS credentials generated successfully"
+else
+    warn "mtls-setup.sh script not found. You will need to generate credentials manually."
+fi
+
+# 5. Inject Gateway Route
+ROUTE_PREFIX=$(echo "$SVC_NAME" | sed 's/-service$//')
+info "Injecting API Gateway route for /api/$ROUTE_PREFIX/**..."
+
+# Verify if route already exists in gateway.yaml
+if grep -q "id: ${SVC_NAME}-route" "$GATEWAY_CONFIG"; then
+    warn "Route '${SVC_NAME}-route' already exists in gateway.yaml. Skipping route injection."
+else
+    # Create temp route definition block
+    ROUTE_BLOCK=$(cat <<EOF
+
+            # Auto-Generated Route for $SVC_NAME
+            - id: ${SVC_NAME}-route
+              uri: lb://${SVC_NAME}
+              predicates:
+                - Path=/api/${ROUTE_PREFIX}/**
+              filters:
+                - StripPrefix=2
+                - SessionToJwt
+EOF
+)
+    # Inject before the OPENAPI / SWAGGER comment line
+    # Match "# ==========================================" followed by "# OPENAPI / SWAGGER AGGREGATION CONFIGURATION"
+    awk -v route="$ROUTE_BLOCK" '
+    BEGIN { injected = 0 }
+    /# ==========================================/ {
+        line = $0
+        getline next_line
+        if (next_line ~ /OPENAPI \/ SWAGGER AGGREGATION/) {
+            if (!injected) {
+                print route
+                injected = 1
+            }
+        }
+        print line
+        print next_line
+        next
+    }
+    { print }
+    ' "$GATEWAY_CONFIG" > "$GATEWAY_CONFIG.tmp"
+    mv "$GATEWAY_CONFIG.tmp" "$GATEWAY_CONFIG"
+    ok "Gateway routing rule appended under prefix: /api/$ROUTE_PREFIX"
+fi
+
+# 6. Inject Docker Compose Service Block
+info "Injecting docker-compose container configuration..."
+
+# Verify if service already exists in compose configuration
+if grep -q "^  ${SVC_NAME}:" "$APPS_COMPOSE"; then
+    warn "Docker service '${SVC_NAME}' already exists in docker-compose.apps.yml. Skipping compose injection."
+else
+    # Create compose definition block
+    COMPOSE_BLOCK=$(cat <<EOF
+  # == Auto-Generated Service: $SVC_NAME ==
+  $SVC_NAME:
+    build:
+      context: ../services/$SVC_NAME
+      dockerfile: Dockerfile
+    image: transcendence-$SVC_NAME:latest
+    container_name: $SVC_NAME
+    environment:
+      - PORT=$INTERNAL_PORT
+      - SPRING_APPLICATION_NAME=$SVC_NAME
+      - EUREKA_URL=https://eureka-server:\${EUREKA_PORT:-8761}/eureka/
+      - CERT_DIR_PATH=/app/certs
+      - JWKS_URI=https://gateway:\${GATEWAY_PORT:-8080}/.well-known/jwks.json
+      - JWT_PUBLIC_KEY_PATH=/app/certs/jwt/jwt_public.pem
+      - CERT_PASSWORD=\${CERT_PASSWORD}
+    volumes:
+      - ../certs:/app/certs:ro
+    healthcheck:
+      test: $HEALTHCHECK_CMD
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - transcendence-net
+
+EOF
+)
+    # Inject before the Bridge Network comment line
+    awk -v compose="$COMPOSE_BLOCK" '
+    BEGIN { injected = 0 }
+    /# == .* Bridge Network Connectivity ==/ {
+        if (!injected) {
+            print compose
+            injected = 1
+        }
+    }
+    { print }
+    ' "$APPS_COMPOSE" > "$APPS_COMPOSE.tmp"
+    mv "$APPS_COMPOSE.tmp" "$APPS_COMPOSE"
+    ok "Container service block added to docker-compose.apps.yml"
+fi
+
+# 7. Hot Reload Gateway Routes
+info "Refreshing Gateway routes dynamically..."
+# 7a. Refresh Config properties from Config Server
+info "Triggering configuration context refresh..."
+CONFIG_REFRESH_STATUS=$(docker exec gateway curl -k -s -w "%{http_code}" -X POST https://localhost:8080/actuator/refresh -o /dev/null || echo "failed")
+
+# 7b. Refresh Gateway routes cache
+info "Triggering Gateway routes cache refresh..."
+ROUTE_REFRESH_STATUS=$(docker exec gateway curl -k -s -w "%{http_code}" -X POST https://localhost:8080/actuator/gateway/refresh -o /dev/null || echo "failed")
+
+if [ "$CONFIG_REFRESH_STATUS" == "200" ] && [ "$ROUTE_REFRESH_STATUS" == "200" ]; then
+    ok "Gateway routes dynamically reloaded (zero-downtime hot refresh)!"
+else
+    warn "Dynamic Gateway refresh status - Config Refresh: $CONFIG_REFRESH_STATUS, Route Refresh: $ROUTE_REFRESH_STATUS."
+fi
+
+echo -e "----------------------------------------------------------------------"
+echo -e "${GREEN}${BOLD}✔ Microservice '$SVC_NAME' is fully provisioned and integrated!${NC}"
+echo -e "To compile and launch the new container run:"
+echo -e "  ${BOLD}docker compose -f docker/docker-compose.apps.yml up -d --build $SVC_NAME${NC}"
+echo -e "----------------------------------------------------------------------"
 
 ```
 
@@ -147,51 +2130,233 @@ distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-mav
 
 ```
 
-## 📄 File: ./services/auth-service/src/main/resources/application-dev.yaml
-```yaml
-spring:
-  config:
-    import: "optional:configserver:https://localhost:${CONFIG_SERVER_PORT}"
-  cloud:
-    config:
-      tls:
-        enabled: true
-        key-store-type: PKCS12
-        trust-store-type: PKCS12
-        key-store: "file:${CERT_DIR_PATH}/services/${spring.application.name}/${spring.application.name}.p12"
-        key-store-password: "${CERT_PASSWORD}"
-        key-password: "${CERT_PASSWORD}"
-        trust-store: "file:${CERT_DIR_PATH}/truststore/truststore.p12"
-        trust-store-password: "${CERT_PASSWORD}"
+## 📄 File: ./services/auth-service/Dockerfile
+```dockerfile
+# ==========================================
+# BUILD STAGE
+# ==========================================
+FROM maven:3.9.6-eclipse-temurin-21-alpine AS builder
+WORKDIR /app
 
+# Cache Maven dependency layers for rapid rebuilds
+COPY pom.xml .
+RUN mvn dependency:go-offline -B
 
+# Copy source and build
+COPY src ./src
+RUN mvn clean package -DskipTests
+
+# ==========================================
+# RUN STAGE
+# ==========================================
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+
+# Install curl for robust healthcheck support
+RUN apk add --no-cache curl
+
+# Copy the built jar from the builder stage
+COPY --from=builder /app/target/*.jar app.jar
+
+# Run the Spring Boot application
+ENTRYPOINT ["java", "-jar", "app.jar"]
 
 ```
 
-## 📄 File: ./services/auth-service/src/main/resources/application.yaml
-```yaml
-spring:
-  application:
-    name: auth-service
+## 📄 File: ./services/auth-service/pom.xml
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.0.6</version>
+        <relativePath/> <!-- lookup parent from repository -->
+    </parent>
+    <groupId>com.ft_transcendence</groupId>
+    <artifactId>auth-service</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>auth-service</name>
+    <description>auth-service</description>
+    <url/>
+    <licenses>
+        <license/>
+    </licenses>
+    <developers>
+        <developer/>
+    </developers>
+    <scm>
+        <connection/>
+        <developerConnection/>
+        <tag/>
+        <url/>
+    </scm>
+    <properties>
+        <java.version>21</java.version>
+        <spring-cloud.version>2025.1.1</spring-cloud.version>
+        <maven.compiler.target>21</maven.compiler.target>
+    </properties>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
+        </dependency>
 
-```
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security-oauth2-client</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security-oauth2-resource-server</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-config</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-session-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>dev.samstevens.totp</groupId>
+            <artifactId>totp</artifactId>
+            <version>1.7.1</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.google.zxing</groupId>
+                    <artifactId>javase</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-api</artifactId>
+            <version>3.0.3</version>
+        </dependency>
+    </dependencies>
 
-## 📄 File: ./services/auth-service/src/main/resources/application-docker.yaml
-```yaml
-spring:
-  config:
-    import: "optional:configserver:https://config-server:${CONFIG_SERVER_PORT}"
-  cloud:
-    config:
-      tls:
-        enabled: true
-        key-store-type: PKCS12
-        trust-store-type: PKCS12
-        key-store: "file:/app/certs/services/${spring.application.name}/${spring.application.name}.p12"
-        key-store-password: "${CERT_PASSWORD}"
-        key-password: "${CERT_PASSWORD}"
-        trust-store: "file:/app/certs/truststore/truststore.p12"
-        trust-store-password: "${CERT_PASSWORD}"
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>default-compile</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>compile</goal>
+                        </goals>
+                        <configuration>
+                            <annotationProcessorPaths>
+                                <path>
+                                    <groupId>org.springframework.boot</groupId>
+                                    <artifactId>spring-boot-configuration-processor</artifactId>
+                                </path>
+                                <path>
+                                    <groupId>org.projectlombok</groupId>
+                                    <artifactId>lombok</artifactId>
+                                </path>
+                            </annotationProcessorPaths>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>default-testCompile</id>
+                        <phase>test-compile</phase>
+                        <goals>
+                            <goal>testCompile</goal>
+                        </goals>
+                        <configuration>
+                            <annotationProcessorPaths>
+                                <path>
+                                    <groupId>org.projectlombok</groupId>
+                                    <artifactId>lombok</artifactId>
+                                </path>
+                            </annotationProcessorPaths>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
+
 ```
 
 ## 📄 File: ./services/auth-service/src/main/java/com/ft_transcendence/auth/AuthServiceApplication.java
@@ -2437,6 +4602,53 @@ public class RedisSessionConfig {
 
 ```
 
+## 📄 File: ./services/auth-service/src/main/resources/application-dev.yaml
+```yaml
+spring:
+  config:
+    import: "optional:configserver:https://localhost:${CONFIG_SERVER_PORT}"
+  cloud:
+    config:
+      tls:
+        enabled: true
+        key-store-type: PKCS12
+        trust-store-type: PKCS12
+        key-store: "file:${CERT_DIR_PATH}/services/${spring.application.name}/${spring.application.name}.p12"
+        key-store-password: "${CERT_PASSWORD}"
+        key-password: "${CERT_PASSWORD}"
+        trust-store: "file:${CERT_DIR_PATH}/truststore/truststore.p12"
+        trust-store-password: "${CERT_PASSWORD}"
+
+
+
+```
+
+## 📄 File: ./services/auth-service/src/main/resources/application-docker.yaml
+```yaml
+spring:
+  config:
+    import: "optional:configserver:https://config-server:${CONFIG_SERVER_PORT}"
+  cloud:
+    config:
+      tls:
+        enabled: true
+        key-store-type: PKCS12
+        trust-store-type: PKCS12
+        key-store: "file:/app/certs/services/${spring.application.name}/${spring.application.name}.p12"
+        key-store-password: "${CERT_PASSWORD}"
+        key-password: "${CERT_PASSWORD}"
+        trust-store: "file:/app/certs/truststore/truststore.p12"
+        trust-store-password: "${CERT_PASSWORD}"
+```
+
+## 📄 File: ./services/auth-service/src/main/resources/application.yaml
+```yaml
+spring:
+  application:
+    name: auth-service
+
+```
+
 ## 📄 File: ./services/auth-service/src/test/java/com/ft_transcendence/auth/AuthServiceApplicationTests.java
 ```java
 package com.ft_transcendence.auth;
@@ -2455,7 +4667,15 @@ class AuthServiceApplicationTests {
 
 ```
 
-## 📄 File: ./services/auth-service/Dockerfile
+## 📄 File: ./services/config-server/.mvn/wrapper/maven-wrapper.properties
+```properties
+wrapperVersion=3.3.4
+distributionType=only-script
+distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.15/apache-maven-3.9.15-bin.zip
+
+```
+
+## 📄 File: ./services/config-server/Dockerfile
 ```dockerfile
 # ==========================================
 # BUILD STAGE
@@ -2485,361 +4705,6 @@ COPY --from=builder /app/target/*.jar app.jar
 
 # Run the Spring Boot application
 ENTRYPOINT ["java", "-jar", "app.jar"]
-
-```
-
-## 📄 File: ./services/auth-service/pom.xml
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
-    <parent>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.0.6</version>
-        <relativePath/> <!-- lookup parent from repository -->
-    </parent>
-    <groupId>com.ft_transcendence</groupId>
-    <artifactId>auth-service</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
-    <name>auth-service</name>
-    <description>auth-service</description>
-    <url/>
-    <licenses>
-        <license/>
-    </licenses>
-    <developers>
-        <developer/>
-    </developers>
-    <scm>
-        <connection/>
-        <developerConnection/>
-        <tag/>
-        <url/>
-    </scm>
-    <properties>
-        <java.version>21</java.version>
-        <spring-cloud.version>2025.1.1</spring-cloud.version>
-        <maven.compiler.target>21</maven.compiler.target>
-    </properties>
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>org.springframework.cloud</groupId>
-                <artifactId>spring-cloud-dependencies</artifactId>
-                <version>${spring-cloud.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
-    <dependencies>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-actuator</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-webmvc</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <optional>true</optional>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-actuator-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-webmvc-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.postgresql</groupId>
-            <artifactId>postgresql</artifactId>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-jpa</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-security-oauth2-client</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-security</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-security-oauth2-resource-server</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.security</groupId>
-            <artifactId>spring-security-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-validation</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-config</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-session-data-redis</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-redis</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>dev.samstevens.totp</groupId>
-            <artifactId>totp</artifactId>
-            <version>1.7.1</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>com.google.zxing</groupId>
-                    <artifactId>javase</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>org.springdoc</groupId>
-            <artifactId>springdoc-openapi-starter-webmvc-api</artifactId>
-            <version>3.0.3</version>
-        </dependency>
-    </dependencies>
-
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-                <configuration>
-                    <excludes>
-                        <exclude>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok</artifactId>
-                        </exclude>
-                    </excludes>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>default-compile</id>
-                        <phase>compile</phase>
-                        <goals>
-                            <goal>compile</goal>
-                        </goals>
-                        <configuration>
-                            <annotationProcessorPaths>
-                                <path>
-                                    <groupId>org.springframework.boot</groupId>
-                                    <artifactId>spring-boot-configuration-processor</artifactId>
-                                </path>
-                                <path>
-                                    <groupId>org.projectlombok</groupId>
-                                    <artifactId>lombok</artifactId>
-                                </path>
-                            </annotationProcessorPaths>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>default-testCompile</id>
-                        <phase>test-compile</phase>
-                        <goals>
-                            <goal>testCompile</goal>
-                        </goals>
-                        <configuration>
-                            <annotationProcessorPaths>
-                                <path>
-                                    <groupId>org.projectlombok</groupId>
-                                    <artifactId>lombok</artifactId>
-                                </path>
-                            </annotationProcessorPaths>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
-    </build>
-
-</project>
-
-```
-
-## 📄 File: ./services/config-server/src/test/java/com/ft_transcendence/configserver/ConfigServerApplicationTests.java
-```java
-package com.ft_transcendence.configserver;
-
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-
-@SpringBootTest
-class ConfigServerApplicationTests {
-
-    @Test
-    void contextLoads() {
-    }
-
-}
-
-```
-
-## 📄 File: ./services/config-server/src/main/resources/application.yaml
-```yaml
-server:
-  port: ${CONFIG_SERVER_PORT}
-  ssl:
-    enabled: true
-    client-auth: need
-    key-store-type: PKCS12
-    trust-store-type: PKCS12
-    key-alias: config-server
-    key-store-password: ${CERT_PASSWORD}
-    trust-store-password: ${CERT_PASSWORD}
-
-spring:
-  application:
-    name: config-server
-  profiles:
-    active: native
-
-```
-
-## 📄 File: ./services/config-server/src/main/resources/application-dev.yaml
-```yaml
-server:
-  ssl:
-    trust-store: file:${CERT_DIR_PATH}/truststore/truststore.p12
-    key-store: file:${CERT_DIR_PATH}/services/config-server/config-server.p12
-
-spring:
-  cloud:
-    config:
-      server:
-        native:
-          search-locations:
-            - file:${CONFIG_REPO_PATH}
-            - file:${CONFIG_REPO_PATH}/{application}
-```
-
-## 📄 File: ./services/config-server/src/main/resources/application-docker.yaml
-```yaml
-server:
-  ssl:
-    trust-store: file:/app/certs/truststore/truststore.p12
-    key-store: file:/app/certs/services/config-server/config-server.p12
-
-spring:
-  cloud:
-    config:
-      server:
-        native:
-          search-locations:
-            - file:/app/config-repo
-            - file:/app/config-repo/{application}
-```
-
-## 📄 File: ./services/config-server/src/main/java/com/ft_transcendence/configserver/ConfigServerApplication.java
-```java
-package com.ft_transcendence.configserver;
-
-import org.springframework.boot.SpringApplication;
-import org.springframework.cloud.config.server.EnableConfigServer;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-
-@EnableConfigServer
-@SpringBootApplication
-public class ConfigServerApplication {
-
-    public static void main(String[] args) {
-        SpringApplication.run(ConfigServerApplication.class, args);
-    }
-
-}
-
-```
-
-## 📄 File: ./services/config-server/src/main/java/com/ft_transcendence/configserver/config/SecurityConfig.java
-```java
-package com.ft_transcendence.configserver.config;
-
-import org.springframework.context.annotation.Bean;
-import org.springframework.security.config.Customizer;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
-
-
-@Configuration
-@EnableWebSecurity
-public class SecurityConfig {
-
-    @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) {
-
-        http
-                // 1. Disable Sessions (Make it Stateless)
-                .sessionManagement(session -> session
-                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-                )
-
-                // 2. Enable mTLS X.509 Extraction
-                .x509(Customizer.withDefaults())
-
-                // 3. Require Authentication for everything
-                .authorizeHttpRequests(auth -> auth
-                        .anyRequest().authenticated()
-                )
-
-                .csrf(AbstractHttpConfigurer::disable)
-                .formLogin(AbstractHttpConfigurer::disable)
-                .httpBasic(AbstractHttpConfigurer::disable);
-
-
-
-        return http.build();
-    }
-
-    @Bean
-    public UserDetailsService userDetailsService() {
-        return username -> User.withUsername(username)
-                .password("")
-                .roles("USER")
-                .build();
-    }
-
-}
-
-```
-
-## 📄 File: ./services/config-server/.mvn/wrapper/maven-wrapper.properties
-```properties
-wrapperVersion=3.3.4
-distributionType=only-script
-distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.15/apache-maven-3.9.15-bin.zip
 
 ```
 
@@ -2928,7 +4793,166 @@ distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-mav
 
 ```
 
-## 📄 File: ./services/config-server/Dockerfile
+## 📄 File: ./services/config-server/src/main/java/com/ft_transcendence/configserver/ConfigServerApplication.java
+```java
+package com.ft_transcendence.configserver;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.cloud.config.server.EnableConfigServer;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@EnableConfigServer
+@SpringBootApplication
+public class ConfigServerApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(ConfigServerApplication.class, args);
+    }
+
+}
+
+```
+
+## 📄 File: ./services/config-server/src/main/java/com/ft_transcendence/configserver/config/SecurityConfig.java
+```java
+package com.ft_transcendence.configserver.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.security.config.Customizer;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+
+
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
+
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) {
+
+        http
+                // 1. Disable Sessions (Make it Stateless)
+                .sessionManagement(session -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                )
+
+                // 2. Enable mTLS X.509 Extraction
+                .x509(Customizer.withDefaults())
+
+                // 3. Require Authentication for everything
+                .authorizeHttpRequests(auth -> auth
+                        .anyRequest().authenticated()
+                )
+
+                .csrf(AbstractHttpConfigurer::disable)
+                .formLogin(AbstractHttpConfigurer::disable)
+                .httpBasic(AbstractHttpConfigurer::disable);
+
+
+
+        return http.build();
+    }
+
+    @Bean
+    public UserDetailsService userDetailsService() {
+        return username -> User.withUsername(username)
+                .password("")
+                .roles("USER")
+                .build();
+    }
+
+}
+
+```
+
+## 📄 File: ./services/config-server/src/main/resources/application-dev.yaml
+```yaml
+server:
+  ssl:
+    trust-store: file:${CERT_DIR_PATH}/truststore/truststore.p12
+    key-store: file:${CERT_DIR_PATH}/services/config-server/config-server.p12
+
+spring:
+  cloud:
+    config:
+      server:
+        native:
+          search-locations:
+            - file:${CONFIG_REPO_PATH}
+            - file:${CONFIG_REPO_PATH}/{application}
+```
+
+## 📄 File: ./services/config-server/src/main/resources/application-docker.yaml
+```yaml
+server:
+  ssl:
+    trust-store: file:/app/certs/truststore/truststore.p12
+    key-store: file:/app/certs/services/config-server/config-server.p12
+
+spring:
+  cloud:
+    config:
+      server:
+        native:
+          search-locations:
+            - file:/app/config-repo
+            - file:/app/config-repo/{application}
+```
+
+## 📄 File: ./services/config-server/src/main/resources/application.yaml
+```yaml
+server:
+  port: ${CONFIG_SERVER_PORT}
+  ssl:
+    enabled: true
+    client-auth: need
+    key-store-type: PKCS12
+    trust-store-type: PKCS12
+    key-alias: config-server
+    key-store-password: ${CERT_PASSWORD}
+    trust-store-password: ${CERT_PASSWORD}
+
+spring:
+  application:
+    name: config-server
+  profiles:
+    active: native
+
+```
+
+## 📄 File: ./services/config-server/src/test/java/com/ft_transcendence/configserver/ConfigServerApplicationTests.java
+```java
+package com.ft_transcendence.configserver;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+
+@SpringBootTest
+class ConfigServerApplicationTests {
+
+    @Test
+    void contextLoads() {
+    }
+
+}
+
+```
+
+## 📄 File: ./services/eureka-server/.mvn/wrapper/maven-wrapper.properties
+```properties
+wrapperVersion=3.3.4
+distributionType=only-script
+distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.14/apache-maven-3.9.14-bin.zip
+
+```
+
+## 📄 File: ./services/eureka-server/Dockerfile
 ```dockerfile
 # ==========================================
 # BUILD STAGE
@@ -2958,14 +4982,6 @@ COPY --from=builder /app/target/*.jar app.jar
 
 # Run the Spring Boot application
 ENTRYPOINT ["java", "-jar", "app.jar"]
-
-```
-
-## 📄 File: ./services/eureka-server/.mvn/wrapper/maven-wrapper.properties
-```properties
-wrapperVersion=3.3.4
-distributionType=only-script
-distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.14/apache-maven-3.9.14-bin.zip
 
 ```
 
@@ -3155,14 +5171,6 @@ spring:
 
 ```
 
-## 📄 File: ./services/eureka-server/src/main/resources/application.yaml
-```yaml
-spring:
-  application:
-    name: eureka-server
-
-```
-
 ## 📄 File: ./services/eureka-server/src/main/resources/application-docker.yaml
 ```yaml
 spring:
@@ -3182,6 +5190,14 @@ spring:
 
 ```
 
+## 📄 File: ./services/eureka-server/src/main/resources/application.yaml
+```yaml
+spring:
+  application:
+    name: eureka-server
+
+```
+
 ## 📄 File: ./services/eureka-server/src/test/java/com/ft_transcendence/eurekaserver/EurekaServerApplicationTests.java
 ```java
 package com.ft_transcendence.eurekaserver;
@@ -3198,1350 +5214,6 @@ class EurekaServerApplicationTests {
 
 }
 
-```
-
-## 📄 File: ./services/eureka-server/Dockerfile
-```dockerfile
-# ==========================================
-# BUILD STAGE
-# ==========================================
-FROM maven:3.9.6-eclipse-temurin-21-alpine AS builder
-WORKDIR /app
-
-# Cache Maven dependency layers for rapid rebuilds
-COPY pom.xml .
-RUN mvn dependency:go-offline -B
-
-# Copy source and build
-COPY src ./src
-RUN mvn clean package -DskipTests
-
-# ==========================================
-# RUN STAGE
-# ==========================================
-FROM eclipse-temurin:21-jre-alpine
-WORKDIR /app
-
-# Install curl for robust healthcheck support
-RUN apk add --no-cache curl
-
-# Copy the built jar from the builder stage
-COPY --from=builder /app/target/*.jar app.jar
-
-# Run the Spring Boot application
-ENTRYPOINT ["java", "-jar", "app.jar"]
-
-```
-
-## 📄 File: ./services/gateway/.mvn/wrapper/maven-wrapper.properties
-```properties
-wrapperVersion=3.3.4
-distributionType=only-script
-distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.14/apache-maven-3.9.14-bin.zip
-
-```
-
-## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/GatewayApplication.java
-```java
-package com.ft_transcendence.gateway;
-
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-
-@SpringBootApplication
-public class GatewayApplication {
-
-    public static void main(String[] args) {
-        SpringApplication.run(GatewayApplication.class, args);
-    }
-
-}
-
-```
-
-## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/core/config/MdcPropagationConfig.java
-```java
-package com.ft_transcendence.gateway.core.config;
-
-import org.slf4j.MDC;
-import reactor.core.publisher.Hooks;
-import jakarta.annotation.PostConstruct;
-import io.micrometer.context.ContextRegistry;
-import org.springframework.context.annotation.Configuration;
-import com.ft_transcendence.gateway.core.util.ReactiveTraceContext;
-
-@Configuration
-public class MdcPropagationConfig {
-
-    @PostConstruct
-    public void initializeReactiveMdcPropagation() {
-        // 1. Core Reactive Hook: Enables global, automated context copying across threads
-        Hooks.enableAutomaticContextPropagation();
-
-        // 2. Map the tracking key between Reactor Context and SLF4J MDC ThreadLocals
-        ContextRegistry.getInstance().registerThreadLocalAccessor(
-                ReactiveTraceContext.TRACE_KEY,
-                () -> MDC.get(ReactiveTraceContext.TRACE_KEY),
-                traceId -> MDC.put(ReactiveTraceContext.TRACE_KEY, traceId),
-                () -> MDC.remove(ReactiveTraceContext.TRACE_KEY)
-        );
-    }
-}
-```
-
-## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/core/config/RedisSessionSerializationConfig.java
-```java
-package com.ft_transcendence.gateway.core.config;
-
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.data.redis.serializer.RedisSerializer;
-import org.springframework.data.redis.serializer.GenericJacksonJsonRedisSerializer;
-
-@Configuration
-public class RedisSessionSerializationConfig {
-
-    @Bean
-    public RedisSerializer<Object> springSessionDefaultRedisSerializer() {
-        return GenericJacksonJsonRedisSerializer.builder().build();
-    }
-
-}
-
-```
-
-## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/core/config/WebClientConfig.java
-```java
-package com.ft_transcendence.gateway.core.config;
-
-import io.netty.handler.ssl.SslContext;
-import io.netty.handler.ssl.SslContextBuilder;
-import org.springframework.boot.ssl.SslBundles;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.cloud.client.loadbalancer.LoadBalanced;
-import org.springframework.http.client.reactive.ReactorClientHttpConnector;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.netty.http.client.HttpClient;
-
-import javax.net.ssl.SSLException;
-
-@Configuration
-public class WebClientConfig {
-
-    @Bean
-    @LoadBalanced // Enables "lb://auth-service" named routing resolutions!
-    public WebClient.Builder webClientBuilder(SslBundles sslBundles) throws SSLException {
-        var sslBundle = sslBundles.getBundle("microservice-bundle");
-
-        // 1. Convert the Spring SslBundle managers into a Netty native SslContext instance
-        SslContext nettySslContext = SslContextBuilder.forClient()
-                .keyManager(sslBundle.getManagers().getKeyManagerFactory())
-                .trustManager(sslBundle.getManagers().getTrustManagerFactory())
-                .build();
-
-        // 2. Feed the native Netty context cleanly into the secure pipeline spec
-        HttpClient httpClient = HttpClient.create()
-                .secure(sslContextSpec -> sslContextSpec.sslContext(nettySslContext));
-
-        return WebClient.builder()
-                .clientConnector(new ReactorClientHttpConnector(httpClient));
-    }
-}
-```
-
-## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/core/filter/ReactiveTraceIdFilter.java
-```java
-package com.ft_transcendence.gateway.core.filter;
-
-import org.springframework.http.server.reactive.ServerHttpRequest;
-import reactor.core.publisher.Mono;
-import org.jspecify.annotations.NonNull;
-import org.springframework.core.Ordered;
-import org.springframework.stereotype.Component;
-import org.springframework.web.server.WebFilter;
-import org.springframework.core.annotation.Order;
-import org.springframework.web.server.WebFilterChain;
-import org.springframework.web.server.ServerWebExchange;
-import com.ft_transcendence.gateway.core.util.ReactiveTraceContext;
-
-import java.util.UUID;
-
-@Component
-@Order(Ordered.HIGHEST_PRECEDENCE)
-public class ReactiveTraceIdFilter implements WebFilter {
-
-    @Override
-    public @NonNull Mono<Void> filter(@NonNull ServerWebExchange exchange, @NonNull WebFilterChain chain) {
-        String existingHeader = exchange.getRequest().getHeaders().getFirst(ReactiveTraceContext.TRACE_HEADER);
-        String traceId = (existingHeader != null && !existingHeader.isBlank()) ? existingHeader : UUID.randomUUID().toString();
-
-        ServerHttpRequest mutatedRequest = exchange.getRequest().mutate()
-                .header(ReactiveTraceContext.TRACE_HEADER, traceId)
-                .build();
-
-        ServerWebExchange mutatedExchange = exchange.mutate().request(mutatedRequest).build();
-
-        mutatedExchange.getAttributes().put(ReactiveTraceContext.TRACE_KEY, traceId);
-        mutatedExchange.getResponse().getHeaders().set(ReactiveTraceContext.TRACE_HEADER, traceId);
-
-        // Pass the mutated exchange down the pipeline
-        return chain.filter(mutatedExchange)
-                .contextWrite(context -> context.put(ReactiveTraceContext.TRACE_KEY, traceId));
-    }
-}
-```
-
-## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/core/filter/SessionToJwtGatewayFilterFactory.java
-```java
-package com.ft_transcendence.gateway.core.filter;
-
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.*;
-import reactor.core.publisher.Mono;
-import org.jspecify.annotations.NullMarked;
-import org.springframework.stereotype.Component;
-import org.springframework.cloud.gateway.filter.GatewayFilter;
-import org.springframework.web.server.ResponseStatusException;
-import com.ft_transcendence.gateway.domain.service.JwtService;
-import org.springframework.http.server.reactive.ServerHttpRequest;
-import com.ft_transcendence.gateway.core.util.ReactiveTraceContext;
-import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory;
-
-import java.util.List;
-
-@Slf4j
-@Component
-public class SessionToJwtGatewayFilterFactory extends AbstractGatewayFilterFactory<SessionToJwtGatewayFilterFactory.Config> {
-
-    private final JwtService jwtService;
-
-    public SessionToJwtGatewayFilterFactory(JwtService jwtService) {
-        super(Config.class);
-        this.jwtService = jwtService;
-    }
-
-    @Override
-    @NullMarked
-    public GatewayFilter apply(Config config) {
-        return (exchange, chain) -> {
-            ServerHttpRequest request = exchange.getRequest();
-            String traceId = ReactiveTraceContext.getTraceId(exchange);
-
-            // 1. Safe Cookie Evaluation: Only evaluates requests routed to protected pages
-            List<HttpCookie> rawSessionCookies = request.getCookies().get("SESSION");
-            if (rawSessionCookies == null || rawSessionCookies.isEmpty()) {
-                log.warn("Missing session cookie context container on guarded route request.");
-                return Mono.error(new ResponseStatusException(
-                        HttpStatus.UNAUTHORIZED,
-                        "An active cookie session is required to traverse this gateway proxy"
-                ));
-            }
-
-            return exchange.getSession().flatMap(webSession -> {
-                Object userIdAttr = webSession.getAttribute("userId");
-                Object rolesAttr = webSession.getAttribute("roles");
-
-                if (userIdAttr == null || rolesAttr == null) {
-                    log.warn("Access intercept - Missing or expired active Redis context.");
-                    return Mono.error(new ResponseStatusException(
-                            HttpStatus.UNAUTHORIZED,
-                            "An active cookie session is required to traverse this gateway proxy"
-                    ));
-                }
-
-                String userId = userIdAttr.toString();
-                String sessionId = webSession.getId();
-                @SuppressWarnings("unchecked")
-                List<String> roles = (List<String>) rolesAttr;
-
-
-                String transitJwt = jwtService.mint(userId, roles, sessionId, traceId);
-
-                ServerHttpRequest mutatedRequest = exchange.getRequest().mutate()
-                        .headers(headers -> {
-                            headers.remove(HttpHeaders.COOKIE);
-                            headers.set(HttpHeaders.AUTHORIZATION, "Bearer " + transitJwt);
-                        })
-                        .build();
-
-                return chain.filter(exchange.mutate().request(mutatedRequest).build());
-            });
-        };
-    }
-
-    public static class Config {
-    }
-}
-```
-
-## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/core/filter/TwoFactorCheckGatewayFilterFactory.java
-```java
-package com.ft_transcendence.gateway.core.filter;
-
-import lombok.extern.slf4j.Slf4j;
-import reactor.core.publisher.Mono;
-import org.jspecify.annotations.NullMarked;
-import org.springframework.http.HttpCookie;
-import org.springframework.http.HttpStatus;
-import org.springframework.stereotype.Component;
-import org.springframework.cloud.gateway.filter.GatewayFilter;
-import org.springframework.web.server.ResponseStatusException;
-import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory;
-
-import java.util.List;
-
-@Slf4j
-@Component
-public class TwoFactorCheckGatewayFilterFactory extends AbstractGatewayFilterFactory<TwoFactorCheckGatewayFilterFactory.Config> {
-
-    public TwoFactorCheckGatewayFilterFactory() {
-        super(Config.class);
-    }
-
-    @Override
-    @NullMarked
-    public GatewayFilter apply(Config config) {
-        return (exchange, chain) -> {
-            // Eager Cookie Evaluation: Fast-fails requests routed to protected pages if cookie is absent
-            List<HttpCookie> rawSessionCookies = exchange.getRequest().getCookies().get("SESSION");
-            if (rawSessionCookies == null || rawSessionCookies.isEmpty()) {
-                log.warn("Missing session cookie context container on 2FA guarded route request.");
-                return Mono.error(new ResponseStatusException(
-                        HttpStatus.UNAUTHORIZED,
-                        "An active cookie session is required to access this resource"
-                ));
-            }
-
-            return exchange.getSession().flatMap(webSession -> {
-                Object isFullyAuthenticatedAttr = webSession.getAttribute("isFullyAuthenticated");
-
-                if (isFullyAuthenticatedAttr == null || !Boolean.parseBoolean(isFullyAuthenticatedAttr.toString())) {
-                    log.warn("Access Intercept - User session requires completed 2FA verification challenge.");
-                    return Mono.error(new ResponseStatusException(
-                            HttpStatus.FORBIDDEN,
-                            "Full multi-factor authentication validation is required to access this resource"
-                    ));
-                }
-
-                return chain.filter(exchange);
-            });
-        };
-    }
-
-    public static class Config {
-    }
-}
-```
-
-## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/core/util/RSAKeyUtils.java
-```java
-package com.ft_transcendence.gateway.core.util;
-
-import org.springframework.core.io.Resource;
-import org.springframework.stereotype.Component;
-
-import java.util.Base64;
-import java.security.KeyFactory;
-import java.nio.charset.StandardCharsets;
-import java.security.spec.X509EncodedKeySpec;
-import java.security.interfaces.RSAPublicKey;
-import java.security.interfaces.RSAPrivateKey;
-import java.security.spec.PKCS8EncodedKeySpec;
-
-@Component
-public class RSAKeyUtils {
-
-    public RSAPrivateKey loadPrivateKey(Resource resource) throws Exception {
-        String pem = readAndClean(resource, "PRIVATE KEY");
-        byte[] encoded = Base64.getDecoder().decode(pem);
-        return (RSAPrivateKey) KeyFactory.getInstance("RSA")
-                .generatePrivate(new PKCS8EncodedKeySpec(encoded));
-    }
-
-    public RSAPublicKey loadPublicKey(Resource resource) throws Exception {
-        String pem = readAndClean(resource, "PUBLIC KEY");
-        byte[] encoded = Base64.getDecoder().decode(pem);
-        return (RSAPublicKey) KeyFactory.getInstance("RSA")
-                .generatePublic(new X509EncodedKeySpec(encoded));
-    }
-
-    private String readAndClean(Resource resource, String label) throws Exception {
-        try (var inputStream = resource.getInputStream()) {
-            String content = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
-            return content
-                    .replace("-----BEGIN " + label + "-----", "")
-                    .replace("-----END " + label + "-----", "")
-                    .replaceAll("\\s", "");
-        }
-    }
-
-}
-
-```
-
-## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/core/util/ReactiveTraceContext.java
-```java
-package com.ft_transcendence.gateway.core.util;
-
-import org.springframework.http.server.reactive.ServerHttpRequest;
-import org.springframework.web.server.ServerWebExchange;
-import java.util.UUID;
-
-public final class ReactiveTraceContext {
-
-    public static final String TRACE_KEY = "trace_id";
-    public static final String TRACE_HEADER = "X-Trace-Id";
-
-    private ReactiveTraceContext() {}
-
-    public static String getTraceId(ServerWebExchange exchange) {
-        if (exchange == null) return UUID.randomUUID().toString();
-
-        // 1. Try to read from exchange attributes first
-        String traceId = exchange.getAttribute(TRACE_KEY);
-
-        // 2. Fallback: Parse from the raw incoming HTTP headers
-        if (traceId == null || traceId.isBlank()) {
-            ServerHttpRequest request = exchange.getRequest();
-            traceId = request.getHeaders().getFirst(TRACE_HEADER);
-        }
-
-        // 3. Emergency: Fallback to a fresh generation if missing
-        if (traceId == null || traceId.isBlank()) {
-            traceId = UUID.randomUUID().toString();
-        }
-
-        return traceId;
-    }
-}
-```
-
-## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/domain/controller/JwksController.java
-```java
-package com.ft_transcendence.gateway.domain.controller;
-
-import com.nimbusds.jose.JOSEException;
-import com.nimbusds.jose.jwk.JWKSet;
-import com.nimbusds.jose.jwk.KeyUse;
-import com.nimbusds.jose.jwk.RSAKey;
-import com.nimbusds.jose.JWSAlgorithm;
-import org.springframework.http.CacheControl;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RestController;
-
-import java.util.Map;
-import java.security.interfaces.RSAPublicKey;
-import java.util.concurrent.TimeUnit;
-
-@RestController
-public class JwksController {
-
-    private final Map<String, Object> cachedJwkSet;
-
-    public JwksController(RSAPublicKey publicKey) throws JOSEException {
-
-        RSAKey jwk = new RSAKey.Builder(publicKey)
-                .keyUse(KeyUse.SIGNATURE)
-                .algorithm(JWSAlgorithm.RS256)
-                .build();
-
-        String dynamicKid = jwk.computeThumbprint().toString();
-        jwk = new RSAKey.Builder(jwk).keyID(dynamicKid).build();
-
-        this.cachedJwkSet = new JWKSet(jwk).toJSONObject();
-
-    }
-
-    @GetMapping(value = "/.well-known/jwks.json", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<Map<String, Object>> getJwks() {
-
-        // Return the body alongside professional HTTP Cache-Control directives.
-        // This tells downstream services: "Cache this safely in your RAM for 24 hours!"
-        return ResponseEntity.ok()
-                .cacheControl(CacheControl.maxAge(24, TimeUnit.HOURS).cachePublic())
-                .body(this.cachedJwkSet);
-    }
-
-}
-
-```
-
-## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/domain/service/JwtService.java
-```java
-package com.ft_transcendence.gateway.domain.service;
-
-import com.nimbusds.jose.JOSEException;
-import com.nimbusds.jose.JWSAlgorithm;
-import com.nimbusds.jose.JWSHeader;
-import com.nimbusds.jose.JWSSigner;
-import com.nimbusds.jose.crypto.RSASSASigner;
-import com.nimbusds.jose.jwk.KeyUse;
-import com.nimbusds.jose.jwk.RSAKey;
-import com.nimbusds.jwt.JWTClaimsSet;
-import com.nimbusds.jwt.SignedJWT;
-import org.springframework.stereotype.Service;
-
-import java.security.interfaces.RSAPublicKey;
-import java.security.interfaces.RSAPrivateKey;
-import java.time.Instant;
-import java.util.Date;
-import java.util.List;
-
-@Service
-public class JwtService {
-
-    private final JWSSigner jwsSigner;
-    private final String activeKid;
-
-    public JwtService(RSAPrivateKey privateKey, RSAPublicKey publicKey) throws JOSEException {
-
-        this.jwsSigner = new RSASSASigner(privateKey);
-
-        RSAKey jwk = new RSAKey.Builder(publicKey)
-                .keyUse(KeyUse.SIGNATURE)
-                .algorithm(JWSAlgorithm.RS256)
-                .build();
-
-        this.activeKid = jwk.computeThumbprint().toString();
-    }
-
-    /**
-     * Mints a cryptographically signed Transit JWT payload.
-     * Includes the critical 'sid' pointer claim to enable downstream programmatic 2FA verification updates.
-     */
-    public String mint(String publicId, List<String> roles, String sessionId, String traceId) { // Added sessionId parameter
-        Instant now = Instant.now();
-
-        try {
-            // Assemble the protected envelope header containing your dynamic thumbprint ID
-            JWSHeader header = new JWSHeader.Builder(JWSAlgorithm.RS256)
-                    .keyID(this.activeKid)
-                    .build();
-
-            // Fill out the token contents safely
-            JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
-                    .subject(publicId)
-                    .issuer("transcendence-gateway")
-                    .issueTime(Date.from(now))
-                    .expirationTime(Date.from(now.plusSeconds(60))) // Short-lived transit window
-                    .claim("roles", roles)
-                    .claim("sid", sessionId)
-                    .claim("tid", traceId)
-                    .build();
-
-            // Seal, cryptographically stamp, and compile into a string text block
-            SignedJWT signedJWT = new SignedJWT(header, claimsSet);
-            signedJWT.sign(this.jwsSigner);
-
-            return signedJWT.serialize();
-
-        } catch (Exception e) {
-            throw new RuntimeException("Cryptographic Error: Failed to mint internal transit token payload", e);
-        }
-    }
-
-}
-
-```
-
-## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/security/config/CryptoConfig.java
-```java
-package com.ft_transcendence.gateway.security.config;
-
-import lombok.RequiredArgsConstructor;
-import org.springframework.context.annotation.Bean;
-import com.ft_transcendence.gateway.core.util.RSAKeyUtils;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
-
-import java.security.interfaces.RSAPrivateKey;
-import java.security.interfaces.RSAPublicKey;
-
-@Configuration
-@RequiredArgsConstructor
-@EnableConfigurationProperties(JwtProperties.class)
-public class CryptoConfig {
-
-    private final RSAKeyUtils keyUtils;
-    private final JwtProperties jwtProperties;
-
-    @Bean
-    public RSAPrivateKey rsaPrivateKey() throws Exception {
-        return keyUtils.loadPrivateKey(jwtProperties.privateKeyLocation());
-    }
-
-    @Bean
-    public RSAPublicKey rsaPublicKey() throws Exception {
-        return keyUtils.loadPublicKey(jwtProperties.publicKeyLocation());
-    }
-}
-```
-
-## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/security/config/JwtProperties.java
-```java
-package com.ft_transcendence.gateway.security.config;
-
-import org.springframework.core.io.Resource;
-import org.springframework.boot.context.properties.ConfigurationProperties;
-
-@ConfigurationProperties(prefix = "custom.jwt")
-public record JwtProperties(
-        Resource privateKeyLocation,
-        Resource publicKeyLocation
-) {}
-```
-
-## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/security/config/SecurityConfig.java
-```java
-package com.ft_transcendence.gateway.security.config;
-
-import lombok.RequiredArgsConstructor;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.security.web.server.SecurityWebFilterChain;
-import org.springframework.security.config.web.server.ServerHttpSecurity;
-import com.ft_transcendence.gateway.security.oauth2.CustomOAuth2SuccessHandler;
-import com.ft_transcendence.gateway.security.oauth2.RedisServerOAuth2AuthorizationRequestRepository;
-import org.springframework.security.web.server.context.NoOpServerSecurityContextRepository;
-import org.springframework.security.web.server.savedrequest.NoOpServerRequestCache;
-import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
-import org.springframework.web.cors.reactive.CorsConfigurationSource;
-import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
-import org.springframework.web.cors.CorsConfiguration;
-
-@Configuration
-@EnableWebFluxSecurity
-@RequiredArgsConstructor
-public class SecurityConfig {
-
-    private final CustomOAuth2SuccessHandler customOAuth2SuccessHandler;
-    private final RedisServerOAuth2AuthorizationRequestRepository redisAuthorizationRepository;
-
-    @org.springframework.beans.factory.annotation.Value("${app.cors.allowed-origins:http://localhost:5173}")
-    private java.util.List<String> allowedOrigins;
-
-    @Bean
-    public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http)
-    {
-        return http
-
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-
-                .authorizeExchange(exchanges -> exchanges
-                        .pathMatchers("/login/**", "/oauth2/**").permitAll()
-                        .anyExchange().permitAll()
-                )
-
-                .securityContextRepository(NoOpServerSecurityContextRepository.getInstance())
-
-                .requestCache(cache -> cache
-                        .requestCache(NoOpServerRequestCache.getInstance()))
-
-                .oauth2Login(oauth2 -> oauth2
-                        .authorizationRequestRepository(redisAuthorizationRepository)
-                        .authenticationSuccessHandler(customOAuth2SuccessHandler)
-                )
-
-                .csrf(ServerHttpSecurity.CsrfSpec::disable)
-                .logout(logout -> logout
-                        .logoutUrl("/api/auth/logout")
-                        .logoutSuccessHandler((exchange, authentication) -> {
-                            exchange.getExchange().getResponse().setStatusCode(org.springframework.http.HttpStatus.OK);
-                            return exchange.getExchange().getSession().flatMap(org.springframework.web.server.WebSession::invalidate);
-                        })
-                )
-                .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
-                .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
-
-
-                .build();
-    }
-
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration config = new CorsConfiguration();
-        config.setAllowCredentials(true);
-        config.setAllowedOrigins(allowedOrigins);
-        config.addAllowedHeader("*");
-        config.addAllowedMethod("*");
-
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", config);
-        return source;
-    }
-
-
-}
-
-```
-
-## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/security/oauth2/CustomOAuth2SuccessHandler.java
-```java
-package com.ft_transcendence.gateway.security.oauth2;
-
-import com.ft_transcendence.gateway.security.oauth2.OAuth2UserInfoCompositeExtractor.OAuth2SyncPayload;
-import com.ft_transcendence.gateway.domain.service.JwtService;
-import com.ft_transcendence.gateway.core.util.ReactiveTraceContext;
-
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.jspecify.annotations.NullMarked;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.MediaType;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
-import org.springframework.security.web.server.DefaultServerRedirectStrategy;
-import org.springframework.security.web.server.ServerRedirectStrategy;
-import org.springframework.security.web.server.WebFilterExchange;
-import org.springframework.security.web.server.authentication.ServerAuthenticationSuccessHandler;
-import org.springframework.stereotype.Component;
-import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.client.WebClientResponseException;
-import org.springframework.web.server.WebSession;
-import org.springframework.web.server.ServerWebExchange;
-import reactor.core.publisher.Mono;
-
-import java.net.URI;
-import java.util.List;
-
-@Slf4j
-@Component
-@RequiredArgsConstructor
-public class CustomOAuth2SuccessHandler implements ServerAuthenticationSuccessHandler {
-
-    private final JwtService jwtService;
-    private final WebClient.Builder webClientBuilder;
-    private final OAuth2UserInfoCompositeExtractor extractorFactory;
-
-    @Value("${app.frontend.base-url:http://localhost:5173}")
-    private String frontendBaseUrl;
-
-    private final ServerRedirectStrategy redirectStrategy = new DefaultServerRedirectStrategy();
-
-    @Override
-    @NullMarked
-    public Mono<Void> onAuthenticationSuccess(WebFilterExchange webFilterExchange, Authentication authentication) {
-        OAuth2AuthenticationToken oauthToken = (OAuth2AuthenticationToken) authentication;
-        ServerWebExchange exchange = webFilterExchange.getExchange();
-
-        OAuth2SyncPayload syncPayload = extractorFactory.extract(
-                oauthToken.getAuthorizedClientRegistrationId(),
-                oauthToken.getPrincipal()
-        );
-
-        return exchange.getSession().flatMap(session -> {
-            String existingUserId = session.getAttribute("userId");
-            Boolean isLinkingInProgress = session.getAttribute("oauth2_linking_in_progress");
-
-            // Evict handshake flag immediately to prevent stale reuse
-            session.getAttributes().remove("oauth2_linking_in_progress");
-
-            if (existingUserId != null && Boolean.TRUE.equals(isLinkingInProgress)) {
-                return executeAccountLink(exchange, session, syncPayload, existingUserId);
-            }
-
-            return executeIdentitySync(exchange, session, syncPayload);
-        });
-    }
-
-    // ── PRIVATE ORCHESTRATION EXTRACTIONS ───────────────────────────────────
-
-    private Mono<Void> executeAccountLink(ServerWebExchange exchange, WebSession session,
-                                          OAuth2SyncPayload payload, String userId) {
-        log.info("Active user [{}] is linking external identity provider [{}]...", userId, payload.provider());
-
-        String transitJwt = mintTransitToken(exchange, session, userId);
-        OAuth2LinkRequest linkRequest = new OAuth2LinkRequest(payload.provider(), payload.providerId());
-
-        return webClientBuilder.build()
-                .post()
-                .uri("https://auth-service/oauth2/link")
-                .header("Authorization", "Bearer " + transitJwt)
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(linkRequest)
-                .retrieve()
-                .toBodilessEntity()
-                .then(redirectStrategy.sendRedirect(exchange, URI.create(frontendBaseUrl + "/dashboard?link=success")))
-                .onErrorResume(ex -> {
-                    log.error("Failed to link social identity record", ex);
-                    return redirectStrategy.sendRedirect(exchange, URI.create(frontendBaseUrl + "/dashboard?link=error"));
-                });
-    }
-
-    private Mono<Void> executeIdentitySync(ServerWebExchange exchange, WebSession session, OAuth2SyncPayload payload) {
-        log.info("OAuth2 login completed via [{}]. Executing downstream identity sync...", payload.provider());
-
-        return webClientBuilder.build()
-                .post()
-                .uri("https://auth-service/oauth2/sync")
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(payload)
-                .retrieve()
-                .bodyToMono(UserSummaryResponse.class)
-                .flatMap(userSummary -> {
-                    session.getAttributes().put("userId", userSummary.userId());
-                    session.getAttributes().put("roles", userSummary.roles());
-                    session.getAttributes().put("isFullyAuthenticated", true);
-
-                    log.info("OAuth Session registration completed for User ID [{}]", userSummary.userId());
-                    return redirectStrategy.sendRedirect(exchange, URI.create(frontendBaseUrl + "/dashboard"));
-                })
-                .onErrorResume(ex -> {
-                    log.error("OAuth2 SSO login synchronization failed", ex);
-                    String errorParam = resolveErrorParam(ex);
-                    return redirectStrategy.sendRedirect(exchange, URI.create(frontendBaseUrl + "/login?error=" + errorParam));
-                });
-    }
-
-    // ── PRIVATE UTILITY SCOPES ──────────────────────────────────────────────
-
-    private String mintTransitToken(ServerWebExchange exchange, WebSession session, String userId) {
-        String traceId = ReactiveTraceContext.getTraceId(exchange);
-
-        List<String> roles = session.getAttribute("roles");
-        if (roles == null) {
-            roles = List.of("ROLE_USER");
-        }
-
-        return jwtService.mint(userId, roles, session.getId(), traceId);
-    }
-
-    private String resolveErrorParam(Throwable ex) {
-        if (ex instanceof WebClientResponseException.Conflict) {
-            return "email_taken";
-        }
-        return "auth_error";
-    }
-
-    private record UserSummaryResponse(String userId, List<String> roles) {}
-}
-```
-
-## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/security/oauth2/FortyTwoUserInfoExtractor.java
-```java
-package com.ft_transcendence.gateway.security.oauth2;
-
-import org.springframework.stereotype.Component;
-import org.springframework.security.oauth2.core.user.OAuth2User;
-
-import java.util.Objects;
-
-@Component
-public class FortyTwoUserInfoExtractor implements OAuth2UserInfoExtractor {
-    @Override
-    public String getRegistrationId() {
-        return "fortytwo";
-    }
-
-    @Override
-    public String getProviderId(OAuth2User oAuth2User) {
-        return String.valueOf(Objects.requireNonNull(oAuth2User.getAttribute("id")));
-    }
-
-    @Override
-    public String getEmail(OAuth2User oAuth2User) {
-        return oAuth2User.getAttribute("email");
-    }
-
-    @Override
-    public String getName(OAuth2User oAuth2User) {
-        return oAuth2User.getAttribute("login");
-    }
-}
-```
-
-## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/security/oauth2/GoogleUserInfoExtractor.java
-```java
-package com.ft_transcendence.gateway.security.oauth2;
-
-import org.springframework.security.oauth2.core.user.OAuth2User;
-import org.springframework.stereotype.Component;
-
-@Component
-public class GoogleUserInfoExtractor implements OAuth2UserInfoExtractor {
-    @Override
-    public String getRegistrationId() {
-        return "google";
-    }
-
-    @Override
-    public String getProviderId(OAuth2User oAuth2User) {
-        return oAuth2User.getAttribute("sub");
-    }
-
-    @Override
-    public String getEmail(OAuth2User oAuth2User) {
-        return oAuth2User.getAttribute("email");
-    }
-
-    @Override
-    public String getName(OAuth2User oAuth2User) {
-        return oAuth2User.getAttribute("name");
-    }
-}
-```
-
-## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/security/oauth2/OAuth2LinkRequest.java
-```java
-package com.ft_transcendence.gateway.security.oauth2;
-
-import lombok.Builder;
-
-@Builder
-public record OAuth2LinkRequest(
-        String provider,
-        String providerId
-) {}
-
-```
-
-## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/security/oauth2/OAuth2UserInfoCompositeExtractor.java
-```java
-package com.ft_transcendence.gateway.security.oauth2;
-
-import org.springframework.stereotype.Component;
-import org.springframework.security.oauth2.core.user.OAuth2User;
-
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
-import java.util.function.Function;
-
-@Component
-public class OAuth2UserInfoCompositeExtractor {
-
-    private final Map<String, OAuth2UserInfoExtractor> extractors;
-
-    public OAuth2UserInfoCompositeExtractor(List<OAuth2UserInfoExtractor> extractorList) {
-        this.extractors = extractorList.stream().collect(Collectors.toMap(
-                extractor -> extractor.getRegistrationId().toLowerCase(),
-                Function.identity()
-        ));
-    }
-
-    public OAuth2SyncPayload extract(String registrationId, OAuth2User oAuth2User) {
-        OAuth2UserInfoExtractor extractor = extractors.get(registrationId.toLowerCase());
-        if (extractor == null) {
-            throw new IllegalArgumentException("Unsupported OAuth2 provider: " + registrationId);
-        }
-        return new OAuth2SyncPayload(
-                registrationId.toUpperCase(),
-                extractor.getProviderId(oAuth2User),
-                extractor.getEmail(oAuth2User),
-                extractor.getName(oAuth2User)
-        );
-    }
-
-    public record OAuth2SyncPayload(String provider, String providerId, String email, String name) {}
-}
-```
-
-## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/security/oauth2/OAuth2UserInfoExtractor.java
-```java
-package com.ft_transcendence.gateway.security.oauth2;
-
-import org.springframework.security.oauth2.core.user.OAuth2User;
-
-public interface OAuth2UserInfoExtractor {
-    String getRegistrationId();
-    String getName(OAuth2User oAuth2User);
-    String getEmail(OAuth2User oAuth2User);
-    String getProviderId(OAuth2User oAuth2User);
-}
-```
-
-## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/security/oauth2/RedisServerOAuth2AuthorizationRequestRepository.java
-```java
-package com.ft_transcendence.gateway.security.oauth2;
-
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.jspecify.annotations.NullMarked;
-import org.springframework.data.redis.core.ReactiveRedisTemplate;
-import org.springframework.security.oauth2.client.web.server.ServerAuthorizationRequestRepository;
-import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
-import org.springframework.stereotype.Component;
-import org.springframework.web.server.ServerWebExchange;
-import reactor.core.publisher.Mono;
-
-import java.io.*;
-import java.time.Duration;
-import java.util.Base64;
-
-@Slf4j
-@Component
-@RequiredArgsConstructor
-public class RedisServerOAuth2AuthorizationRequestRepository 
-        implements ServerAuthorizationRequestRepository<OAuth2AuthorizationRequest> {
-
-    private static final String REDIS_KEY_PREFIX = "oauth2_auth_request:";
-    private static final Duration STATE_TTL = Duration.ofMinutes(10);
-
-    private final ReactiveRedisTemplate<String, String> reactiveRedisTemplate;
-
-    @Override
-    @NullMarked
-    public Mono<OAuth2AuthorizationRequest> loadAuthorizationRequest(ServerWebExchange exchange) {
-        String state = exchange.getRequest().getQueryParams().getFirst("state");
-        if (state == null) {
-            return Mono.empty();
-        }
-        return reactiveRedisTemplate.opsForValue()
-                .get(REDIS_KEY_PREFIX + state)
-                .map(this::deserialize)
-                .onErrorResume(ex -> {
-                    log.error("Failed to load authorization request from Redis", ex);
-                    return Mono.empty();
-                });
-    }
-
-    @Override
-    @NullMarked
-    public Mono<Void> saveAuthorizationRequest(OAuth2AuthorizationRequest authorizationRequest, ServerWebExchange exchange) {
-        if (authorizationRequest == null || authorizationRequest.getState() == null) {
-            return Mono.empty();
-        }
-
-        String state = authorizationRequest.getState();
-        String serialized = serialize(authorizationRequest);
-        if (serialized == null) {
-            return Mono.empty();
-        }
-
-        // 1. Prepare our isolation string persistent task
-        Mono<Boolean> saveStateMono = reactiveRedisTemplate.opsForValue()
-                .set(REDIS_KEY_PREFIX + state, serialized, STATE_TTL);
-
-        // 2. Safely mutate the attributes map and force a state persistence save flush
-        boolean isLink = exchange.getRequest().getQueryParams().containsKey("link");
-        Mono<Void> updateSessionMono = exchange.getSession().flatMap(session -> {
-            if (isLink) {
-                session.getAttributes().put("oauth2_linking_in_progress", true);
-                log.debug("Marked active session [{}] as in-flight account linking state", session.getId());
-            } else {
-                session.getAttributes().remove("oauth2_linking_in_progress");
-            }
-            // CRITICAL FIX: Explicitly invoke the session saver downstream flush!
-            return session.save();
-        });
-
-        // Chain them synchronously to confirm both state writes land before redirection
-        return saveStateMono.then(updateSessionMono);
-    }
-
-    @Override
-    @NullMarked
-    public Mono<OAuth2AuthorizationRequest> removeAuthorizationRequest(ServerWebExchange exchange) {
-        String state = exchange.getRequest().getQueryParams().getFirst("state");
-        if (state == null) {
-            return Mono.empty();
-        }
-        String key = REDIS_KEY_PREFIX + state;
-        return reactiveRedisTemplate.opsForValue()
-                .get(key)
-                .flatMap(serialized -> reactiveRedisTemplate.delete(key)
-                        .thenReturn(deserialize(serialized)))
-                .onErrorResume(ex -> {
-                    log.error("Failed to remove authorization request from Redis", ex);
-                    return Mono.empty();
-                });
-    }
-
-    // ── BASE64 OBJECT SERIALIZATION HELPERS ─────────────────────────────────
-
-    private String serialize(OAuth2AuthorizationRequest request) {
-        try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
-             ObjectOutputStream oos = new ObjectOutputStream(baos)) {
-            oos.writeObject(request);
-            return Base64.getEncoder().encodeToString(baos.toByteArray());
-        } catch (IOException e) {
-            log.error("Serialization of OAuth2AuthorizationRequest failed", e);
-            return null;
-        }
-    }
-
-    private OAuth2AuthorizationRequest deserialize(String base64) {
-        byte[] bytes = Base64.getDecoder().decode(base64);
-        try (ByteArrayInputStream bais = new ByteArrayInputStream(bytes);
-             ObjectInputStream ois = new ObjectInputStream(bais)) {
-            return (OAuth2AuthorizationRequest) ois.readObject();
-        } catch (IOException | ClassNotFoundException e) {
-            log.error("Deserialization of OAuth2AuthorizationRequest failed", e);
-            return null;
-        }
-    }
-}
-
-```
-
-## 📄 File: ./services/gateway/src/main/resources/application-dev.yaml
-```yaml
-spring:
-  config:
-    import: "optional:configserver:https://localhost:${CONFIG_SERVER_PORT}"
-  cloud:
-    config:
-      tls:
-        enabled: true
-        key-store-type: PKCS12
-        trust-store-type: PKCS12
-        key-store: "file:${CERT_DIR_PATH}/services/${spring.application.name}/${spring.application.name}.p12"
-        key-store-password: "${CERT_PASSWORD}"
-        key-password: "${CERT_PASSWORD}"
-        trust-store: "file:${CERT_DIR_PATH}/truststore/truststore.p12"
-        trust-store-password: "${CERT_PASSWORD}"
-
-```
-
-## 📄 File: ./services/gateway/src/main/resources/application.yaml
-```yaml
-spring:
-  application:
-    name: gateway
-```
-
-## 📄 File: ./services/gateway/src/main/resources/application-docker.yaml
-```yaml
-spring:
-  config:
-    import: "optional:configserver:https://config-server:${CONFIG_SERVER_PORT}"
-  cloud:
-    config:
-      tls:
-        enabled: true
-        key-store-type: PKCS12
-        trust-store-type: PKCS12
-        key-store: "file:/app/certs/services/${spring.application.name}/${spring.application.name}.p12"
-        key-store-password: "${CERT_PASSWORD}"
-        key-password: "${CERT_PASSWORD}"
-        trust-store: "file:/app/certs/truststore/truststore.p12"
-        trust-store-password: "${CERT_PASSWORD}"
-```
-
-## 📄 File: ./services/gateway/src/test/java/com/ft_transcendence/gateway/GatewayApplicationTests.java
-```java
-package com.ft_transcendence.gateway;
-
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-
-@SpringBootTest
-class GatewayApplicationTests {
-
-    @Test
-    void contextLoads() {
-    }
-
-}
-
-```
-
-## 📄 File: ./services/gateway/Dockerfile
-```dockerfile
-# ==========================================
-# BUILD STAGE
-# ==========================================
-FROM maven:3.9.6-eclipse-temurin-21-alpine AS builder
-WORKDIR /app
-
-# Cache Maven dependency layers for rapid rebuilds
-COPY pom.xml .
-RUN mvn dependency:go-offline -B
-
-# Copy source and build
-COPY src ./src
-RUN mvn clean package -DskipTests
-
-# ==========================================
-# RUN STAGE
-# ==========================================
-FROM eclipse-temurin:21-jre-alpine
-WORKDIR /app
-
-# Install curl for robust healthcheck support
-RUN apk add --no-cache curl
-
-# Copy the built jar from the builder stage
-COPY --from=builder /app/target/*.jar app.jar
-
-# Run the Spring Boot application
-ENTRYPOINT ["java", "-jar", "app.jar"]
-
-```
-
-## 📄 File: ./services/gateway/pom.xml
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
-    <parent>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.0.6</version>
-        <relativePath/> </parent>
-    <groupId>com.ft_transcendence</groupId>
-    <artifactId>gateway</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
-    <name>gateway</name>
-    <description>gateway</description>
-
-    <properties>
-        <java.version>21</java.version>
-        <spring-cloud.version>2025.1.1</spring-cloud.version>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
-    </properties>
-
-    <dependencies>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-actuator</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-security</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-security-oauth2-resource-server</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-session-data-redis</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-gateway-server-webflux</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-config</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.micrometer</groupId>
-            <artifactId>context-propagation</artifactId>
-            <version>1.2.1</version>
-        </dependency>
-        <dependency>
-            <groupId>org.springdoc</groupId>
-            <artifactId>springdoc-openapi-starter-webflux-ui</artifactId>
-            <version>3.0.3</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-configuration-processor</artifactId>
-            <optional>true</optional>
-        </dependency>
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <optional>true</optional>
-        </dependency>
-
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-actuator-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-redis-reactive-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-security-oauth2-resource-server-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-security-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-session-data-redis-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.projectreactor</groupId>
-            <artifactId>reactor-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-security-oauth2-client</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.github.ben-manes.caffeine</groupId>
-            <artifactId>caffeine</artifactId>
-        </dependency>
-    </dependencies>
-
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>org.springframework.cloud</groupId>
-                <artifactId>spring-cloud-dependencies</artifactId>
-                <version>${spring-cloud.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
-
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-                <configuration>
-                    <excludes>
-                        <exclude>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok</artifactId>
-                        </exclude>
-                    </excludes>
-                </configuration>
-            </plugin>
-
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.14.1</version>
-                <configuration>
-                    <source>21</source>
-                    <target>21</target>
-                    <annotationProcessorPaths>
-                        <path>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok</artifactId>
-                            <version>${lombok.version}</version>
-                        </path>
-                        <path>
-                            <groupId>org.springframework.boot</groupId>
-                            <artifactId>spring-boot-configuration-processor</artifactId>
-                            <version>${project.parent.version}</version>
-                        </path>
-                    </annotationProcessorPaths>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
-</project>
 ```
 
 ## 📄 File: ./services/frontend/eslint.config.js
@@ -6859,1981 +7531,2603 @@ export default defineConfig({
 
 ```
 
-## 📄 File: ./config/config-repo/gateway/gateway-dev.yaml
-```yaml
-# ==========================================
-#  Gateway Dev Configuration
-# ==========================================
+## 📄 File: ./services/gateway/.mvn/wrapper/maven-wrapper.properties
+```properties
+wrapperVersion=3.3.4
+distributionType=only-script
+distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.14/apache-maven-3.9.14-bin.zip
 
-spring:
-  data:
-    redis:
-      host: localhost
-          
-custom:
-  jwt:
-    public-key-location: file:${CERT_DIR_PATH}/jwt/jwt_public.pem
-    private-key-location: file:${CERT_DIR_PATH}/jwt/jwt_private_pkcs8.pem
 ```
 
-## 📄 File: ./config/config-repo/gateway/gateway-docker.yaml
-```yaml
+## 📄 File: ./services/gateway/Dockerfile
+```dockerfile
 # ==========================================
-#  Gateway Docker Configuration
+# BUILD STAGE
 # ==========================================
+FROM maven:3.9.6-eclipse-temurin-21-alpine AS builder
+WORKDIR /app
 
-spring:
-  data:
-    redis:
-      host: redis-container
-          
-custom:
-  jwt:
-    public-key-location: file:/app/certs/jwt/jwt_public.pem
-    private-key-location: file:/app/certs/jwt/jwt_private_pkcs8.pem
+# Cache Maven dependency layers for rapid rebuilds
+COPY pom.xml .
+RUN mvn dependency:go-offline -B
+
+# Copy source and build
+COPY src ./src
+RUN mvn clean package -DskipTests
+
+# ==========================================
+# RUN STAGE
+# ==========================================
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+
+# Install curl for robust healthcheck support
+RUN apk add --no-cache curl
+
+# Copy the built jar from the builder stage
+COPY --from=builder /app/target/*.jar app.jar
+
+# Run the Spring Boot application
+ENTRYPOINT ["java", "-jar", "app.jar"]
+
 ```
 
-## 📄 File: ./config/config-repo/gateway/gateway.yaml
+## 📄 File: ./services/gateway/pom.xml
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.0.6</version>
+        <relativePath/> </parent>
+    <groupId>com.ft_transcendence</groupId>
+    <artifactId>gateway</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>gateway</name>
+    <description>gateway</description>
+
+    <properties>
+        <java.version>21</java.version>
+        <spring-cloud.version>2025.1.1</spring-cloud.version>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security-oauth2-resource-server</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-session-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-gateway-server-webflux</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-config</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>context-propagation</artifactId>
+            <version>1.2.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webflux-ui</artifactId>
+            <version>3.0.3</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis-reactive-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security-oauth2-resource-server-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-session-data-redis-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.projectreactor</groupId>
+            <artifactId>reactor-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security-oauth2-client</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+    </dependencies>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.14.1</version>
+                <configuration>
+                    <source>21</source>
+                    <target>21</target>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                        <path>
+                            <groupId>org.springframework.boot</groupId>
+                            <artifactId>spring-boot-configuration-processor</artifactId>
+                            <version>${project.parent.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+```
+
+## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/GatewayApplication.java
+```java
+package com.ft_transcendence.gateway;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class GatewayApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(GatewayApplication.class, args);
+    }
+
+}
+
+```
+
+## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/core/config/MdcPropagationConfig.java
+```java
+package com.ft_transcendence.gateway.core.config;
+
+import org.slf4j.MDC;
+import reactor.core.publisher.Hooks;
+import jakarta.annotation.PostConstruct;
+import io.micrometer.context.ContextRegistry;
+import org.springframework.context.annotation.Configuration;
+import com.ft_transcendence.gateway.core.util.ReactiveTraceContext;
+
+@Configuration
+public class MdcPropagationConfig {
+
+    @PostConstruct
+    public void initializeReactiveMdcPropagation() {
+        // 1. Core Reactive Hook: Enables global, automated context copying across threads
+        Hooks.enableAutomaticContextPropagation();
+
+        // 2. Map the tracking key between Reactor Context and SLF4J MDC ThreadLocals
+        ContextRegistry.getInstance().registerThreadLocalAccessor(
+                ReactiveTraceContext.TRACE_KEY,
+                () -> MDC.get(ReactiveTraceContext.TRACE_KEY),
+                traceId -> MDC.put(ReactiveTraceContext.TRACE_KEY, traceId),
+                () -> MDC.remove(ReactiveTraceContext.TRACE_KEY)
+        );
+    }
+}
+```
+
+## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/core/config/RedisSessionSerializationConfig.java
+```java
+package com.ft_transcendence.gateway.core.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.serializer.RedisSerializer;
+import org.springframework.data.redis.serializer.GenericJacksonJsonRedisSerializer;
+
+@Configuration
+public class RedisSessionSerializationConfig {
+
+    @Bean
+    public RedisSerializer<Object> springSessionDefaultRedisSerializer() {
+        return GenericJacksonJsonRedisSerializer.builder().build();
+    }
+
+}
+
+```
+
+## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/core/config/WebClientConfig.java
+```java
+package com.ft_transcendence.gateway.core.config;
+
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
+import org.springframework.boot.ssl.SslBundles;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.cloud.client.loadbalancer.LoadBalanced;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.netty.http.client.HttpClient;
+
+import javax.net.ssl.SSLException;
+
+@Configuration
+public class WebClientConfig {
+
+    @Bean
+    @LoadBalanced // Enables "lb://auth-service" named routing resolutions!
+    public WebClient.Builder webClientBuilder(SslBundles sslBundles) throws SSLException {
+        var sslBundle = sslBundles.getBundle("microservice-bundle");
+
+        // 1. Convert the Spring SslBundle managers into a Netty native SslContext instance
+        SslContext nettySslContext = SslContextBuilder.forClient()
+                .keyManager(sslBundle.getManagers().getKeyManagerFactory())
+                .trustManager(sslBundle.getManagers().getTrustManagerFactory())
+                .build();
+
+        // 2. Feed the native Netty context cleanly into the secure pipeline spec
+        HttpClient httpClient = HttpClient.create()
+                .secure(sslContextSpec -> sslContextSpec.sslContext(nettySslContext));
+
+        return WebClient.builder()
+                .clientConnector(new ReactorClientHttpConnector(httpClient));
+    }
+}
+```
+
+## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/core/filter/ReactiveTraceIdFilter.java
+```java
+package com.ft_transcendence.gateway.core.filter;
+
+import org.springframework.http.server.reactive.ServerHttpRequest;
+import reactor.core.publisher.Mono;
+import org.jspecify.annotations.NonNull;
+import org.springframework.core.Ordered;
+import org.springframework.stereotype.Component;
+import org.springframework.web.server.WebFilter;
+import org.springframework.core.annotation.Order;
+import org.springframework.web.server.WebFilterChain;
+import org.springframework.web.server.ServerWebExchange;
+import com.ft_transcendence.gateway.core.util.ReactiveTraceContext;
+
+import java.util.UUID;
+
+@Component
+@Order(Ordered.HIGHEST_PRECEDENCE)
+public class ReactiveTraceIdFilter implements WebFilter {
+
+    @Override
+    public @NonNull Mono<Void> filter(@NonNull ServerWebExchange exchange, @NonNull WebFilterChain chain) {
+        String existingHeader = exchange.getRequest().getHeaders().getFirst(ReactiveTraceContext.TRACE_HEADER);
+        String traceId = (existingHeader != null && !existingHeader.isBlank()) ? existingHeader : UUID.randomUUID().toString();
+
+        ServerHttpRequest mutatedRequest = exchange.getRequest().mutate()
+                .header(ReactiveTraceContext.TRACE_HEADER, traceId)
+                .build();
+
+        ServerWebExchange mutatedExchange = exchange.mutate().request(mutatedRequest).build();
+
+        mutatedExchange.getAttributes().put(ReactiveTraceContext.TRACE_KEY, traceId);
+        mutatedExchange.getResponse().getHeaders().set(ReactiveTraceContext.TRACE_HEADER, traceId);
+
+        // Pass the mutated exchange down the pipeline
+        return chain.filter(mutatedExchange)
+                .contextWrite(context -> context.put(ReactiveTraceContext.TRACE_KEY, traceId));
+    }
+}
+```
+
+## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/core/filter/SessionToJwtGatewayFilterFactory.java
+```java
+package com.ft_transcendence.gateway.core.filter;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.*;
+import reactor.core.publisher.Mono;
+import org.jspecify.annotations.NullMarked;
+import org.springframework.stereotype.Component;
+import org.springframework.cloud.gateway.filter.GatewayFilter;
+import org.springframework.web.server.ResponseStatusException;
+import com.ft_transcendence.gateway.domain.service.JwtService;
+import org.springframework.http.server.reactive.ServerHttpRequest;
+import com.ft_transcendence.gateway.core.util.ReactiveTraceContext;
+import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory;
+
+import java.util.List;
+
+@Slf4j
+@Component
+public class SessionToJwtGatewayFilterFactory extends AbstractGatewayFilterFactory<SessionToJwtGatewayFilterFactory.Config> {
+
+    private final JwtService jwtService;
+
+    public SessionToJwtGatewayFilterFactory(JwtService jwtService) {
+        super(Config.class);
+        this.jwtService = jwtService;
+    }
+
+    @Override
+    @NullMarked
+    public GatewayFilter apply(Config config) {
+        return (exchange, chain) -> {
+            ServerHttpRequest request = exchange.getRequest();
+            String traceId = ReactiveTraceContext.getTraceId(exchange);
+
+            // 1. Safe Cookie Evaluation: Only evaluates requests routed to protected pages
+            List<HttpCookie> rawSessionCookies = request.getCookies().get("SESSION");
+            if (rawSessionCookies == null || rawSessionCookies.isEmpty()) {
+                log.warn("Missing session cookie context container on guarded route request.");
+                return Mono.error(new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "An active cookie session is required to traverse this gateway proxy"
+                ));
+            }
+
+            return exchange.getSession().flatMap(webSession -> {
+                Object userIdAttr = webSession.getAttribute("userId");
+                Object rolesAttr = webSession.getAttribute("roles");
+
+                if (userIdAttr == null || rolesAttr == null) {
+                    log.warn("Access intercept - Missing or expired active Redis context.");
+                    return Mono.error(new ResponseStatusException(
+                            HttpStatus.UNAUTHORIZED,
+                            "An active cookie session is required to traverse this gateway proxy"
+                    ));
+                }
+
+                String userId = userIdAttr.toString();
+                String sessionId = webSession.getId();
+                @SuppressWarnings("unchecked")
+                List<String> roles = (List<String>) rolesAttr;
+
+
+                String transitJwt = jwtService.mint(userId, roles, sessionId, traceId);
+
+                ServerHttpRequest mutatedRequest = exchange.getRequest().mutate()
+                        .headers(headers -> {
+                            headers.remove(HttpHeaders.COOKIE);
+                            headers.set(HttpHeaders.AUTHORIZATION, "Bearer " + transitJwt);
+                        })
+                        .build();
+
+                return chain.filter(exchange.mutate().request(mutatedRequest).build());
+            });
+        };
+    }
+
+    public static class Config {
+    }
+}
+```
+
+## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/core/filter/TwoFactorCheckGatewayFilterFactory.java
+```java
+package com.ft_transcendence.gateway.core.filter;
+
+import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Mono;
+import org.jspecify.annotations.NullMarked;
+import org.springframework.http.HttpCookie;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Component;
+import org.springframework.cloud.gateway.filter.GatewayFilter;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory;
+
+import java.util.List;
+
+@Slf4j
+@Component
+public class TwoFactorCheckGatewayFilterFactory extends AbstractGatewayFilterFactory<TwoFactorCheckGatewayFilterFactory.Config> {
+
+    public TwoFactorCheckGatewayFilterFactory() {
+        super(Config.class);
+    }
+
+    @Override
+    @NullMarked
+    public GatewayFilter apply(Config config) {
+        return (exchange, chain) -> {
+            // Eager Cookie Evaluation: Fast-fails requests routed to protected pages if cookie is absent
+            List<HttpCookie> rawSessionCookies = exchange.getRequest().getCookies().get("SESSION");
+            if (rawSessionCookies == null || rawSessionCookies.isEmpty()) {
+                log.warn("Missing session cookie context container on 2FA guarded route request.");
+                return Mono.error(new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "An active cookie session is required to access this resource"
+                ));
+            }
+
+            return exchange.getSession().flatMap(webSession -> {
+                Object isFullyAuthenticatedAttr = webSession.getAttribute("isFullyAuthenticated");
+
+                if (isFullyAuthenticatedAttr == null || !Boolean.parseBoolean(isFullyAuthenticatedAttr.toString())) {
+                    log.warn("Access Intercept - User session requires completed 2FA verification challenge.");
+                    return Mono.error(new ResponseStatusException(
+                            HttpStatus.FORBIDDEN,
+                            "Full multi-factor authentication validation is required to access this resource"
+                    ));
+                }
+
+                return chain.filter(exchange);
+            });
+        };
+    }
+
+    public static class Config {
+    }
+}
+```
+
+## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/core/util/RSAKeyUtils.java
+```java
+package com.ft_transcendence.gateway.core.util;
+
+import org.springframework.core.io.Resource;
+import org.springframework.stereotype.Component;
+
+import java.util.Base64;
+import java.security.KeyFactory;
+import java.nio.charset.StandardCharsets;
+import java.security.spec.X509EncodedKeySpec;
+import java.security.interfaces.RSAPublicKey;
+import java.security.interfaces.RSAPrivateKey;
+import java.security.spec.PKCS8EncodedKeySpec;
+
+@Component
+public class RSAKeyUtils {
+
+    public RSAPrivateKey loadPrivateKey(Resource resource) throws Exception {
+        String pem = readAndClean(resource, "PRIVATE KEY");
+        byte[] encoded = Base64.getDecoder().decode(pem);
+        return (RSAPrivateKey) KeyFactory.getInstance("RSA")
+                .generatePrivate(new PKCS8EncodedKeySpec(encoded));
+    }
+
+    public RSAPublicKey loadPublicKey(Resource resource) throws Exception {
+        String pem = readAndClean(resource, "PUBLIC KEY");
+        byte[] encoded = Base64.getDecoder().decode(pem);
+        return (RSAPublicKey) KeyFactory.getInstance("RSA")
+                .generatePublic(new X509EncodedKeySpec(encoded));
+    }
+
+    private String readAndClean(Resource resource, String label) throws Exception {
+        try (var inputStream = resource.getInputStream()) {
+            String content = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+            return content
+                    .replace("-----BEGIN " + label + "-----", "")
+                    .replace("-----END " + label + "-----", "")
+                    .replaceAll("\\s", "");
+        }
+    }
+
+}
+
+```
+
+## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/core/util/ReactiveTraceContext.java
+```java
+package com.ft_transcendence.gateway.core.util;
+
+import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.web.server.ServerWebExchange;
+import java.util.UUID;
+
+public final class ReactiveTraceContext {
+
+    public static final String TRACE_KEY = "trace_id";
+    public static final String TRACE_HEADER = "X-Trace-Id";
+
+    private ReactiveTraceContext() {}
+
+    public static String getTraceId(ServerWebExchange exchange) {
+        if (exchange == null) return UUID.randomUUID().toString();
+
+        // 1. Try to read from exchange attributes first
+        String traceId = exchange.getAttribute(TRACE_KEY);
+
+        // 2. Fallback: Parse from the raw incoming HTTP headers
+        if (traceId == null || traceId.isBlank()) {
+            ServerHttpRequest request = exchange.getRequest();
+            traceId = request.getHeaders().getFirst(TRACE_HEADER);
+        }
+
+        // 3. Emergency: Fallback to a fresh generation if missing
+        if (traceId == null || traceId.isBlank()) {
+            traceId = UUID.randomUUID().toString();
+        }
+
+        return traceId;
+    }
+}
+```
+
+## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/domain/controller/JwksController.java
+```java
+package com.ft_transcendence.gateway.domain.controller;
+
+import com.nimbusds.jose.JOSEException;
+import com.nimbusds.jose.jwk.JWKSet;
+import com.nimbusds.jose.jwk.KeyUse;
+import com.nimbusds.jose.jwk.RSAKey;
+import com.nimbusds.jose.JWSAlgorithm;
+import org.springframework.http.CacheControl;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Map;
+import java.security.interfaces.RSAPublicKey;
+import java.util.concurrent.TimeUnit;
+
+@RestController
+public class JwksController {
+
+    private final Map<String, Object> cachedJwkSet;
+
+    public JwksController(RSAPublicKey publicKey) throws JOSEException {
+
+        RSAKey jwk = new RSAKey.Builder(publicKey)
+                .keyUse(KeyUse.SIGNATURE)
+                .algorithm(JWSAlgorithm.RS256)
+                .build();
+
+        String dynamicKid = jwk.computeThumbprint().toString();
+        jwk = new RSAKey.Builder(jwk).keyID(dynamicKid).build();
+
+        this.cachedJwkSet = new JWKSet(jwk).toJSONObject();
+
+    }
+
+    @GetMapping(value = "/.well-known/jwks.json", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Map<String, Object>> getJwks() {
+
+        // Return the body alongside professional HTTP Cache-Control directives.
+        // This tells downstream services: "Cache this safely in your RAM for 24 hours!"
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.maxAge(24, TimeUnit.HOURS).cachePublic())
+                .body(this.cachedJwkSet);
+    }
+
+}
+
+```
+
+## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/domain/service/JwtService.java
+```java
+package com.ft_transcendence.gateway.domain.service;
+
+import com.nimbusds.jose.JOSEException;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.JWSHeader;
+import com.nimbusds.jose.JWSSigner;
+import com.nimbusds.jose.crypto.RSASSASigner;
+import com.nimbusds.jose.jwk.KeyUse;
+import com.nimbusds.jose.jwk.RSAKey;
+import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.SignedJWT;
+import org.springframework.stereotype.Service;
+
+import java.security.interfaces.RSAPublicKey;
+import java.security.interfaces.RSAPrivateKey;
+import java.time.Instant;
+import java.util.Date;
+import java.util.List;
+
+@Service
+public class JwtService {
+
+    private final JWSSigner jwsSigner;
+    private final String activeKid;
+
+    public JwtService(RSAPrivateKey privateKey, RSAPublicKey publicKey) throws JOSEException {
+
+        this.jwsSigner = new RSASSASigner(privateKey);
+
+        RSAKey jwk = new RSAKey.Builder(publicKey)
+                .keyUse(KeyUse.SIGNATURE)
+                .algorithm(JWSAlgorithm.RS256)
+                .build();
+
+        this.activeKid = jwk.computeThumbprint().toString();
+    }
+
+    /**
+     * Mints a cryptographically signed Transit JWT payload.
+     * Includes the critical 'sid' pointer claim to enable downstream programmatic 2FA verification updates.
+     */
+    public String mint(String publicId, List<String> roles, String sessionId, String traceId) { // Added sessionId parameter
+        Instant now = Instant.now();
+
+        try {
+            // Assemble the protected envelope header containing your dynamic thumbprint ID
+            JWSHeader header = new JWSHeader.Builder(JWSAlgorithm.RS256)
+                    .keyID(this.activeKid)
+                    .build();
+
+            // Fill out the token contents safely
+            JWTClaimsSet claimsSet = new JWTClaimsSet.Builder()
+                    .subject(publicId)
+                    .issuer("transcendence-gateway")
+                    .issueTime(Date.from(now))
+                    .expirationTime(Date.from(now.plusSeconds(60))) // Short-lived transit window
+                    .claim("roles", roles)
+                    .claim("sid", sessionId)
+                    .claim("tid", traceId)
+                    .build();
+
+            // Seal, cryptographically stamp, and compile into a string text block
+            SignedJWT signedJWT = new SignedJWT(header, claimsSet);
+            signedJWT.sign(this.jwsSigner);
+
+            return signedJWT.serialize();
+
+        } catch (Exception e) {
+            throw new RuntimeException("Cryptographic Error: Failed to mint internal transit token payload", e);
+        }
+    }
+
+}
+
+```
+
+## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/security/config/CryptoConfig.java
+```java
+package com.ft_transcendence.gateway.security.config;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Bean;
+import com.ft_transcendence.gateway.core.util.RSAKeyUtils;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+
+import java.security.interfaces.RSAPrivateKey;
+import java.security.interfaces.RSAPublicKey;
+
+@Configuration
+@RequiredArgsConstructor
+@EnableConfigurationProperties(JwtProperties.class)
+public class CryptoConfig {
+
+    private final RSAKeyUtils keyUtils;
+    private final JwtProperties jwtProperties;
+
+    @Bean
+    public RSAPrivateKey rsaPrivateKey() throws Exception {
+        return keyUtils.loadPrivateKey(jwtProperties.privateKeyLocation());
+    }
+
+    @Bean
+    public RSAPublicKey rsaPublicKey() throws Exception {
+        return keyUtils.loadPublicKey(jwtProperties.publicKeyLocation());
+    }
+}
+```
+
+## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/security/config/JwtProperties.java
+```java
+package com.ft_transcendence.gateway.security.config;
+
+import org.springframework.core.io.Resource;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+@ConfigurationProperties(prefix = "custom.jwt")
+public record JwtProperties(
+        Resource privateKeyLocation,
+        Resource publicKeyLocation
+) {}
+```
+
+## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/security/config/SecurityConfig.java
+```java
+package com.ft_transcendence.gateway.security.config;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.web.server.SecurityWebFilterChain;
+import org.springframework.security.config.web.server.ServerHttpSecurity;
+import com.ft_transcendence.gateway.security.oauth2.CustomOAuth2SuccessHandler;
+import com.ft_transcendence.gateway.security.oauth2.RedisServerOAuth2AuthorizationRequestRepository;
+import org.springframework.security.web.server.context.NoOpServerSecurityContextRepository;
+import org.springframework.security.web.server.savedrequest.NoOpServerRequestCache;
+import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
+import org.springframework.web.cors.reactive.CorsConfigurationSource;
+import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
+import org.springframework.web.cors.CorsConfiguration;
+
+@Configuration
+@EnableWebFluxSecurity
+@RequiredArgsConstructor
+public class SecurityConfig {
+
+    private final CustomOAuth2SuccessHandler customOAuth2SuccessHandler;
+    private final RedisServerOAuth2AuthorizationRequestRepository redisAuthorizationRepository;
+
+    @org.springframework.beans.factory.annotation.Value("${app.cors.allowed-origins:http://localhost:5173}")
+    private java.util.List<String> allowedOrigins;
+
+    @Bean
+    public SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http)
+    {
+        return http
+
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+
+                .authorizeExchange(exchanges -> exchanges
+                        .pathMatchers("/login/**", "/oauth2/**").permitAll()
+                        .anyExchange().permitAll()
+                )
+
+                .securityContextRepository(NoOpServerSecurityContextRepository.getInstance())
+
+                .requestCache(cache -> cache
+                        .requestCache(NoOpServerRequestCache.getInstance()))
+
+                .oauth2Login(oauth2 -> oauth2
+                        .authorizationRequestRepository(redisAuthorizationRepository)
+                        .authenticationSuccessHandler(customOAuth2SuccessHandler)
+                )
+
+                .csrf(ServerHttpSecurity.CsrfSpec::disable)
+                .logout(logout -> logout
+                        .logoutUrl("/api/auth/logout")
+                        .logoutSuccessHandler((exchange, authentication) -> {
+                            exchange.getExchange().getResponse().setStatusCode(org.springframework.http.HttpStatus.OK);
+                            return exchange.getExchange().getSession().flatMap(org.springframework.web.server.WebSession::invalidate);
+                        })
+                )
+                .httpBasic(ServerHttpSecurity.HttpBasicSpec::disable)
+                .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
+
+
+                .build();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowCredentials(true);
+        config.setAllowedOrigins(allowedOrigins);
+        config.addAllowedHeader("*");
+        config.addAllowedMethod("*");
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
+    }
+
+
+}
+
+```
+
+## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/security/oauth2/CustomOAuth2SuccessHandler.java
+```java
+package com.ft_transcendence.gateway.security.oauth2;
+
+import com.ft_transcendence.gateway.security.oauth2.OAuth2UserInfoCompositeExtractor.OAuth2SyncPayload;
+import com.ft_transcendence.gateway.domain.service.JwtService;
+import com.ft_transcendence.gateway.core.util.ReactiveTraceContext;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.NullMarked;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.security.web.server.DefaultServerRedirectStrategy;
+import org.springframework.security.web.server.ServerRedirectStrategy;
+import org.springframework.security.web.server.WebFilterExchange;
+import org.springframework.security.web.server.authentication.ServerAuthenticationSuccessHandler;
+import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+import org.springframework.web.server.WebSession;
+import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Mono;
+
+import java.net.URI;
+import java.util.List;
+
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class CustomOAuth2SuccessHandler implements ServerAuthenticationSuccessHandler {
+
+    private final JwtService jwtService;
+    private final WebClient.Builder webClientBuilder;
+    private final OAuth2UserInfoCompositeExtractor extractorFactory;
+
+    @Value("${app.frontend.base-url:http://localhost:5173}")
+    private String frontendBaseUrl;
+
+    private final ServerRedirectStrategy redirectStrategy = new DefaultServerRedirectStrategy();
+
+    @Override
+    @NullMarked
+    public Mono<Void> onAuthenticationSuccess(WebFilterExchange webFilterExchange, Authentication authentication) {
+        OAuth2AuthenticationToken oauthToken = (OAuth2AuthenticationToken) authentication;
+        ServerWebExchange exchange = webFilterExchange.getExchange();
+
+        OAuth2SyncPayload syncPayload = extractorFactory.extract(
+                oauthToken.getAuthorizedClientRegistrationId(),
+                oauthToken.getPrincipal()
+        );
+
+        return exchange.getSession().flatMap(session -> {
+            String existingUserId = session.getAttribute("userId");
+            Boolean isLinkingInProgress = session.getAttribute("oauth2_linking_in_progress");
+
+            // Evict handshake flag immediately to prevent stale reuse
+            session.getAttributes().remove("oauth2_linking_in_progress");
+
+            if (existingUserId != null && Boolean.TRUE.equals(isLinkingInProgress)) {
+                return executeAccountLink(exchange, session, syncPayload, existingUserId);
+            }
+
+            return executeIdentitySync(exchange, session, syncPayload);
+        });
+    }
+
+    // ── PRIVATE ORCHESTRATION EXTRACTIONS ───────────────────────────────────
+
+    private Mono<Void> executeAccountLink(ServerWebExchange exchange, WebSession session,
+                                          OAuth2SyncPayload payload, String userId) {
+        log.info("Active user [{}] is linking external identity provider [{}]...", userId, payload.provider());
+
+        String transitJwt = mintTransitToken(exchange, session, userId);
+        OAuth2LinkRequest linkRequest = new OAuth2LinkRequest(payload.provider(), payload.providerId());
+
+        return webClientBuilder.build()
+                .post()
+                .uri("https://auth-service/oauth2/link")
+                .header("Authorization", "Bearer " + transitJwt)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(linkRequest)
+                .retrieve()
+                .toBodilessEntity()
+                .then(redirectStrategy.sendRedirect(exchange, URI.create(frontendBaseUrl + "/dashboard?link=success")))
+                .onErrorResume(ex -> {
+                    log.error("Failed to link social identity record", ex);
+                    return redirectStrategy.sendRedirect(exchange, URI.create(frontendBaseUrl + "/dashboard?link=error"));
+                });
+    }
+
+    private Mono<Void> executeIdentitySync(ServerWebExchange exchange, WebSession session, OAuth2SyncPayload payload) {
+        log.info("OAuth2 login completed via [{}]. Executing downstream identity sync...", payload.provider());
+
+        return webClientBuilder.build()
+                .post()
+                .uri("https://auth-service/oauth2/sync")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(payload)
+                .retrieve()
+                .bodyToMono(UserSummaryResponse.class)
+                .flatMap(userSummary -> {
+                    session.getAttributes().put("userId", userSummary.userId());
+                    session.getAttributes().put("roles", userSummary.roles());
+                    session.getAttributes().put("isFullyAuthenticated", true);
+
+                    log.info("OAuth Session registration completed for User ID [{}]", userSummary.userId());
+                    return redirectStrategy.sendRedirect(exchange, URI.create(frontendBaseUrl + "/dashboard"));
+                })
+                .onErrorResume(ex -> {
+                    log.error("OAuth2 SSO login synchronization failed", ex);
+                    String errorParam = resolveErrorParam(ex);
+                    return redirectStrategy.sendRedirect(exchange, URI.create(frontendBaseUrl + "/login?error=" + errorParam));
+                });
+    }
+
+    // ── PRIVATE UTILITY SCOPES ──────────────────────────────────────────────
+
+    private String mintTransitToken(ServerWebExchange exchange, WebSession session, String userId) {
+        String traceId = ReactiveTraceContext.getTraceId(exchange);
+
+        List<String> roles = session.getAttribute("roles");
+        if (roles == null) {
+            roles = List.of("ROLE_USER");
+        }
+
+        return jwtService.mint(userId, roles, session.getId(), traceId);
+    }
+
+    private String resolveErrorParam(Throwable ex) {
+        if (ex instanceof WebClientResponseException.Conflict) {
+            return "email_taken";
+        }
+        return "auth_error";
+    }
+
+    private record UserSummaryResponse(String userId, List<String> roles) {}
+}
+```
+
+## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/security/oauth2/FortyTwoUserInfoExtractor.java
+```java
+package com.ft_transcendence.gateway.security.oauth2;
+
+import org.springframework.stereotype.Component;
+import org.springframework.security.oauth2.core.user.OAuth2User;
+
+import java.util.Objects;
+
+@Component
+public class FortyTwoUserInfoExtractor implements OAuth2UserInfoExtractor {
+    @Override
+    public String getRegistrationId() {
+        return "fortytwo";
+    }
+
+    @Override
+    public String getProviderId(OAuth2User oAuth2User) {
+        return String.valueOf(Objects.requireNonNull(oAuth2User.getAttribute("id")));
+    }
+
+    @Override
+    public String getEmail(OAuth2User oAuth2User) {
+        return oAuth2User.getAttribute("email");
+    }
+
+    @Override
+    public String getName(OAuth2User oAuth2User) {
+        return oAuth2User.getAttribute("login");
+    }
+}
+```
+
+## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/security/oauth2/GoogleUserInfoExtractor.java
+```java
+package com.ft_transcendence.gateway.security.oauth2;
+
+import org.springframework.security.oauth2.core.user.OAuth2User;
+import org.springframework.stereotype.Component;
+
+@Component
+public class GoogleUserInfoExtractor implements OAuth2UserInfoExtractor {
+    @Override
+    public String getRegistrationId() {
+        return "google";
+    }
+
+    @Override
+    public String getProviderId(OAuth2User oAuth2User) {
+        return oAuth2User.getAttribute("sub");
+    }
+
+    @Override
+    public String getEmail(OAuth2User oAuth2User) {
+        return oAuth2User.getAttribute("email");
+    }
+
+    @Override
+    public String getName(OAuth2User oAuth2User) {
+        return oAuth2User.getAttribute("name");
+    }
+}
+```
+
+## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/security/oauth2/OAuth2LinkRequest.java
+```java
+package com.ft_transcendence.gateway.security.oauth2;
+
+import lombok.Builder;
+
+@Builder
+public record OAuth2LinkRequest(
+        String provider,
+        String providerId
+) {}
+
+```
+
+## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/security/oauth2/OAuth2UserInfoCompositeExtractor.java
+```java
+package com.ft_transcendence.gateway.security.oauth2;
+
+import org.springframework.stereotype.Component;
+import org.springframework.security.oauth2.core.user.OAuth2User;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.function.Function;
+
+@Component
+public class OAuth2UserInfoCompositeExtractor {
+
+    private final Map<String, OAuth2UserInfoExtractor> extractors;
+
+    public OAuth2UserInfoCompositeExtractor(List<OAuth2UserInfoExtractor> extractorList) {
+        this.extractors = extractorList.stream().collect(Collectors.toMap(
+                extractor -> extractor.getRegistrationId().toLowerCase(),
+                Function.identity()
+        ));
+    }
+
+    public OAuth2SyncPayload extract(String registrationId, OAuth2User oAuth2User) {
+        OAuth2UserInfoExtractor extractor = extractors.get(registrationId.toLowerCase());
+        if (extractor == null) {
+            throw new IllegalArgumentException("Unsupported OAuth2 provider: " + registrationId);
+        }
+        return new OAuth2SyncPayload(
+                registrationId.toUpperCase(),
+                extractor.getProviderId(oAuth2User),
+                extractor.getEmail(oAuth2User),
+                extractor.getName(oAuth2User)
+        );
+    }
+
+    public record OAuth2SyncPayload(String provider, String providerId, String email, String name) {}
+}
+```
+
+## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/security/oauth2/OAuth2UserInfoExtractor.java
+```java
+package com.ft_transcendence.gateway.security.oauth2;
+
+import org.springframework.security.oauth2.core.user.OAuth2User;
+
+public interface OAuth2UserInfoExtractor {
+    String getRegistrationId();
+    String getName(OAuth2User oAuth2User);
+    String getEmail(OAuth2User oAuth2User);
+    String getProviderId(OAuth2User oAuth2User);
+}
+```
+
+## 📄 File: ./services/gateway/src/main/java/com/ft_transcendence/gateway/security/oauth2/RedisServerOAuth2AuthorizationRequestRepository.java
+```java
+package com.ft_transcendence.gateway.security.oauth2;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.jspecify.annotations.NullMarked;
+import org.springframework.data.redis.core.ReactiveRedisTemplate;
+import org.springframework.security.oauth2.client.web.server.ServerAuthorizationRequestRepository;
+import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
+import org.springframework.stereotype.Component;
+import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Mono;
+
+import java.io.*;
+import java.time.Duration;
+import java.util.Base64;
+
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class RedisServerOAuth2AuthorizationRequestRepository 
+        implements ServerAuthorizationRequestRepository<OAuth2AuthorizationRequest> {
+
+    private static final String REDIS_KEY_PREFIX = "oauth2_auth_request:";
+    private static final Duration STATE_TTL = Duration.ofMinutes(10);
+
+    private final ReactiveRedisTemplate<String, String> reactiveRedisTemplate;
+
+    @Override
+    @NullMarked
+    public Mono<OAuth2AuthorizationRequest> loadAuthorizationRequest(ServerWebExchange exchange) {
+        String state = exchange.getRequest().getQueryParams().getFirst("state");
+        if (state == null) {
+            return Mono.empty();
+        }
+        return reactiveRedisTemplate.opsForValue()
+                .get(REDIS_KEY_PREFIX + state)
+                .map(this::deserialize)
+                .onErrorResume(ex -> {
+                    log.error("Failed to load authorization request from Redis", ex);
+                    return Mono.empty();
+                });
+    }
+
+    @Override
+    @NullMarked
+    public Mono<Void> saveAuthorizationRequest(OAuth2AuthorizationRequest authorizationRequest, ServerWebExchange exchange) {
+        if (authorizationRequest == null || authorizationRequest.getState() == null) {
+            return Mono.empty();
+        }
+
+        String state = authorizationRequest.getState();
+        String serialized = serialize(authorizationRequest);
+        if (serialized == null) {
+            return Mono.empty();
+        }
+
+        // 1. Prepare our isolation string persistent task
+        Mono<Boolean> saveStateMono = reactiveRedisTemplate.opsForValue()
+                .set(REDIS_KEY_PREFIX + state, serialized, STATE_TTL);
+
+        // 2. Safely mutate the attributes map and force a state persistence save flush
+        boolean isLink = exchange.getRequest().getQueryParams().containsKey("link");
+        Mono<Void> updateSessionMono = exchange.getSession().flatMap(session -> {
+            if (isLink) {
+                session.getAttributes().put("oauth2_linking_in_progress", true);
+                log.debug("Marked active session [{}] as in-flight account linking state", session.getId());
+            } else {
+                session.getAttributes().remove("oauth2_linking_in_progress");
+            }
+            // CRITICAL FIX: Explicitly invoke the session saver downstream flush!
+            return session.save();
+        });
+
+        // Chain them synchronously to confirm both state writes land before redirection
+        return saveStateMono.then(updateSessionMono);
+    }
+
+    @Override
+    @NullMarked
+    public Mono<OAuth2AuthorizationRequest> removeAuthorizationRequest(ServerWebExchange exchange) {
+        String state = exchange.getRequest().getQueryParams().getFirst("state");
+        if (state == null) {
+            return Mono.empty();
+        }
+        String key = REDIS_KEY_PREFIX + state;
+        return reactiveRedisTemplate.opsForValue()
+                .get(key)
+                .flatMap(serialized -> reactiveRedisTemplate.delete(key)
+                        .thenReturn(deserialize(serialized)))
+                .onErrorResume(ex -> {
+                    log.error("Failed to remove authorization request from Redis", ex);
+                    return Mono.empty();
+                });
+    }
+
+    // ── BASE64 OBJECT SERIALIZATION HELPERS ─────────────────────────────────
+
+    private String serialize(OAuth2AuthorizationRequest request) {
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
+             ObjectOutputStream oos = new ObjectOutputStream(baos)) {
+            oos.writeObject(request);
+            return Base64.getEncoder().encodeToString(baos.toByteArray());
+        } catch (IOException e) {
+            log.error("Serialization of OAuth2AuthorizationRequest failed", e);
+            return null;
+        }
+    }
+
+    private OAuth2AuthorizationRequest deserialize(String base64) {
+        byte[] bytes = Base64.getDecoder().decode(base64);
+        try (ByteArrayInputStream bais = new ByteArrayInputStream(bytes);
+             ObjectInputStream ois = new ObjectInputStream(bais)) {
+            return (OAuth2AuthorizationRequest) ois.readObject();
+        } catch (IOException | ClassNotFoundException e) {
+            log.error("Deserialization of OAuth2AuthorizationRequest failed", e);
+            return null;
+        }
+    }
+}
+
+```
+
+## 📄 File: ./services/gateway/src/main/resources/application-dev.yaml
 ```yaml
-# ==========================================
-# GATEWAY ROUTING & EDGE CONFIGURATION
-# ==========================================
-
-server:
-  port: ${GATEWAY_PORT}
-  ssl:
-    client-auth: none
-
 spring:
-  # == Redis Session Management ==
-  session:
-    timeout: 7d
-    data:
-      redis:
-        namespace: "transcendence"
-        save-mode: on-set-attribute
-        repository-type: indexed
-  data:
-    redis:
-      port: ${REDIS_PORT}
-      password: ${REDIS_PASSWORD}
-
-  # == Security & OAuth2 Configuration ==
-  security:
-    oauth2:
-      client:
-        registration:
-          google:
-            client-id: ${GOOGLE_CLIENT_ID}
-            client-secret: ${GOOGLE_CLIENT_SECRET}
-            scope:
-              - openid
-              - profile
-              - email
-            redirect-uri: "{baseUrl}/login/oauth2/code/google"
-
-  # == WebClient & Netty Routing Engine Client SSL Configuration ==
+  config:
+    import: "optional:configserver:https://localhost:${CONFIG_SERVER_PORT}"
   cloud:
-    gateway:
-      server:
-        webflux:
-          httpclient:
-            wiretap: true
-            ssl:
-              ssl-bundle: microservice-bundle
-        # == Discovery Configuration ==
-          discovery:
-            locator:
-              enabled: true
-              lower-case-service-id: true
-
-          routes:
-            # OpenAPI Spec Bypass (High Priority)
-            - id: auth-service-openapi-bypass
-              uri: lb://auth-service
-              order: 1
-              predicates:
-                - Path=/api/auth/v3/api-docs/**, /api/auth/v3/api-docs
-              filters:
-                - StripPrefix=2
-
-            # Public paths
-            - id: auth-service-public
-              uri: lb://auth-service
-              order: 2
-              predicates:
-                - Path=/api/auth/login, /api/auth/register
-              filters:
-                - StripPrefix=2
-
-            # Semi-Protected (2FA challenge)
-            - id: auth-service-2fa-verification
-              uri: lb://auth-service
-              order: 3
-              predicates:
-                - Path=/api/auth/2fa/verify
-              filters:
-                - StripPrefix=2
-                - SessionToJwt
-
-            # Secure Catch-All (Enforces Full Authentication)
-            - id: auth-service-secure-catchall
-              uri: lb://auth-service
-              order: 4
-              predicates:
-                - Path=/api/auth/**
-              filters:
-                - StripPrefix=2
-                - SessionToJwt
-                - TwoFactorCheck
-
-# ==========================================
-# OPENAPI / SWAGGER AGGREGATION CONFIGURATION
-# ==========================================
-springdoc:
-  swagger-ui:
-    use-root-path: false
-    urls:
-      - name: "Authentication Service"
-        url: "/api/auth/v3/api-docs"
-
-# ==========================================
-# APPLICATION CORE SECURITY & CORS CONFIG
-# ==========================================
-app:
-  cors:
-    allowed-origins: "${CORS_ALLOWED_ORIGINS:http://localhost:5173}"
-  frontend:
-    base-url: "${FRONTEND_BASE_URL:http://localhost:5173}"
-
-logging:
-  level:
-    org.springframework.cloud.gateway: TRACE
-    org.springframework.cloud.loadbalancer: TRACE
-
+    config:
+      tls:
+        enabled: true
+        key-store-type: PKCS12
+        trust-store-type: PKCS12
+        key-store: "file:${CERT_DIR_PATH}/services/${spring.application.name}/${spring.application.name}.p12"
+        key-store-password: "${CERT_PASSWORD}"
+        key-password: "${CERT_PASSWORD}"
+        trust-store: "file:${CERT_DIR_PATH}/truststore/truststore.p12"
+        trust-store-password: "${CERT_PASSWORD}"
 
 ```
 
-## 📄 File: ./config/config-repo/eureka-server/eureka-server-dev.yaml
+## 📄 File: ./services/gateway/src/main/resources/application-docker.yaml
 ```yaml
-# ==========================================
-# EUREKA SERVER DEV OVERRIDES
-# ==========================================
-
-eureka:
-  instance:
-    hostname: localhost
-
-```
-
-## 📄 File: ./config/config-repo/eureka-server/eureka-server-docker.yaml
-```yaml
-# ==========================================
-# EUREKA SERVER DOCKER OVERRIDES
-# ==========================================
-
-eureka:
-  instance:
-    hostname: eureka-server
-
-```
-
-## 📄 File: ./config/config-repo/eureka-server/eureka-server.yaml
-```yaml
-# ==========================================
-# Global Eureka Server Configuration
-# ==========================================
-
-server:
-  port: ${EUREKA_PORT}
-  ssl:
-    client-auth: want # Allow browsers to view the UI dashboard easily without requiring an mTLS certificate
-
-eureka:
-  client:
-    fetch-registry: false
-    register-with-eureka: false
-```
-
-## 📄 File: ./config/config-repo/auth-service/auth-service-dev.yaml
-```yaml
-# ==========================================
-# AUTH SERVICE DEVELOPMENT OVERRIDES
-# ==========================================
-
 spring:
-  datasource:
-    url: jdbc:postgresql://localhost:${POSTGRES_PORT}/${DB_NAME}
-  
-  data:
-    redis:
-      host: localhost
-  
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          jwk-set-uri: "https://localhost:${GATEWAY_PORT}/.well-known/jwks.json"
+  config:
+    import: "optional:configserver:https://config-server:${CONFIG_SERVER_PORT}"
+  cloud:
+    config:
+      tls:
+        enabled: true
+        key-store-type: PKCS12
+        trust-store-type: PKCS12
+        key-store: "file:/app/certs/services/${spring.application.name}/${spring.application.name}.p12"
+        key-store-password: "${CERT_PASSWORD}"
+        key-password: "${CERT_PASSWORD}"
+        trust-store: "file:/app/certs/truststore/truststore.p12"
+        trust-store-password: "${CERT_PASSWORD}"
 ```
 
-## 📄 File: ./config/config-repo/auth-service/auth-service-docker.yaml
+## 📄 File: ./services/gateway/src/main/resources/application.yaml
 ```yaml
-# ==========================================
-# AUTH SERVICE DOCKER OVERRIDES
-# ==========================================
-
 spring:
-  datasource:
-    url: jdbc:postgresql://postgres-db:${POSTGRES_PORT}/${DB_NAME}
-  
-  data:
-    redis:
-      host: redis-container
-  
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          jwk-set-uri: "https://gateway:${GATEWAY_PORT}/.well-known/jwks.json"
+  application:
+    name: gateway
+```
+
+## 📄 File: ./services/gateway/src/main/resources/static/developer-portal.html
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transcendence DevPortal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0d0f14;
+            --card-bg: rgba(22, 28, 45, 0.4);
+            --card-border: rgba(255, 255, 255, 0.08);
+            --text-color: #e2e8f0;
+            --text-muted: #94a3b8;
+            --primary: #6366f1;
+            --primary-glow: rgba(99, 102, 241, 0.3);
+            --success: #10b981;
+            --success-glow: rgba(16, 185, 129, 0.25);
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --mono-font: 'JetBrains Mono', monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.12) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.08) 0px, transparent 50%);
+            color: var(--text-color);
+            font-family: 'Outfit', sans-serif;
+            min-height: 100vh;
+            padding: 2.5rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        header {
+            width: 100%;
+            max-width: 1200px;
+            margin-bottom: 3rem;
+            text-align: center;
+        }
+
+        .logo-container {
+            display: inline-flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .logo-badge {
+            background: linear-gradient(135deg, var(--primary), #a855f7);
+            color: #ffffff;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-weight: 800;
+            font-size: 0.85rem;
+            letter-spacing: 0.05em;
+            box-shadow: 0 0 20px var(--primary-glow);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            background: linear-gradient(to right, #ffffff, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.02em;
+        }
+
+        p.subtitle {
+            color: var(--text-muted);
+            margin-top: 0.5rem;
+            font-size: 1.1rem;
+        }
+
+        main {
+            width: 100%;
+            max-width: 1200px;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 2.5rem;
+        }
+
+        @media (min-width: 900px) {
+            main {
+                grid-template-columns: 3fr 2fr;
+            }
+        }
+
+        .section-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: #ffffff;
+        }
+
+        .section-title::after {
+            content: '';
+            flex-grow: 1;
+            height: 1px;
+            background: linear-gradient(to right, rgba(255, 255, 255, 0.1), transparent);
+        }
+
+        /* Dashboards Card Grid */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2.5rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(12px);
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(99, 102, 241, 0.35);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), 0 0 15px rgba(99, 102, 241, 0.05);
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: var(--primary);
+            opacity: 0;
+        }
+
+        .card:hover::before {
+            opacity: 1;
+        }
+
+        .card.secure-card::before {
+            background: var(--success);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1rem;
+        }
+
+        .icon-wrapper {
+            background: rgba(255, 255, 255, 0.04);
+            border-radius: 12px;
+            padding: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        .badge {
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.2rem 0.5rem;
+            border-radius: 6px;
+            text-transform: uppercase;
+        }
+
+        .badge-https {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--success);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.05);
+        }
+
+        .badge-http {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--warning);
+            border: 1px solid rgba(245, 158, 11, 0.2);
+        }
+
+        .card h3 {
+            font-size: 1.15rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #ffffff;
+        }
+
+        .card p {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            line-height: 1.4;
+            flex-grow: 1;
+            margin-bottom: 1.25rem;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            background: var(--primary);
+            color: #ffffff;
+            font-weight: 600;
+            font-size: 0.9rem;
+            padding: 0.6rem 1rem;
+            border-radius: 10px;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 12px var(--primary-glow);
+        }
+
+        .btn:hover {
+            background: #4f46e5;
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-outline {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            background: transparent;
+            color: var(--text-color);
+            border: 1px solid var(--card-border);
+            font-weight: 600;
+            font-size: 0.9rem;
+            padding: 0.6rem 1rem;
+            border-radius: 10px;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .btn-outline:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--text-muted);
+        }
+
+        /* Console Checkbox List */
+        .checklist-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            backdrop-filter: blur(12px);
+        }
+
+        .health-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .health-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 1rem;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+        }
+
+        .health-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .health-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            box-shadow: 0 0 10px var(--text-muted);
+        }
+
+        .health-indicator.active {
+            background: var(--success);
+            box-shadow: 0 0 10px var(--success-glow);
+            animation: pulse 2s infinite;
+        }
+
+        .health-indicator.down {
+            background: var(--danger);
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+        }
+
+        .health-indicator.warning {
+            background: var(--warning);
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
+            animation: pulse 3s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .health-name {
+            font-size: 0.95rem;
+            font-weight: 600;
+        }
+
+        .health-status-badge {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-muted);
+        }
+
+        .health-endpoint {
+            font-size: 0.8rem;
+            font-family: var(--mono-font);
+            color: var(--text-muted);
+        }
+
+        /* CLI Cheat Sheet Codeblock */
+        .cli-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            backdrop-filter: blur(12px);
+        }
+
+        .code-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .command-block {
+            background: rgba(10, 11, 15, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 1rem;
+            position: relative;
+        }
+
+        .command-desc {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+
+        .command-line {
+            font-family: var(--mono-font);
+            font-size: 0.85rem;
+            color: #38bdf8;
+            word-break: break-all;
+            padding-right: 2rem;
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 0.25rem;
+            border-radius: 4px;
+        }
+
+        .copy-btn:hover {
+            color: #ffffff;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        footer {
+            margin-top: 4rem;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        footer a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo-container">
+            <span class="logo-badge">ZERO TRUST</span>
+            <h1>Transcendence</h1>
+        </div>
+        <p class="subtitle">Microservice Development Control Panel</p>
+    </header>
+
+    <main>
+        <div>
+            <!-- Dashboard Links Section -->
+            <h2 class="section-title">🔌 Active Management Dashboards</h2>
+            <div class="dashboard-grid">
+                
+                <!-- Eureka Card -->
+                <div class="card secure-card">
+                    <div class="card-header">
+                        <div class="icon-wrapper">📡</div>
+                        <span class="badge badge-https">mTLS HTTPS</span>
+                    </div>
+                    <h3>Eureka Discovery Server</h3>
+                    <p>Registry view of all active services and internal health statuses.</p>
+                    <a href="https://localhost:8761/" target="_blank" class="btn">Launch Dashboard</a>
+                </div>
+
+                <!-- API Gateway Card -->
+                <div class="card secure-card">
+                    <div class="card-header">
+                        <div class="icon-wrapper">🛡️</div>
+                        <span class="badge badge-https">mTLS HTTPS</span>
+                    </div>
+                    <h3>Gateway OpenAPI (Swagger)</h3>
+                    <p>Aggregated interactive playground and schemas for all API routes.</p>
+                    <a href="https://localhost:8080/swagger-ui.html" target="_blank" class="btn">Explore APIs</a>
+                </div>
+
+                <!-- Redis Commander Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="icon-wrapper">🗄️</div>
+                        <span class="badge badge-http">HTTP</span>
+                    </div>
+                    <h3>Redis Commander</h3>
+                    <p>Web UI for searching keys, managing sessions, and monitoring cache data.</p>
+                    <a href="http://localhost:6381/" target="_blank" class="btn">Open Commander</a>
+                </div>
+
+                <!-- RabbitMQ Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="icon-wrapper">🐇</div>
+                        <span class="badge badge-http">HTTP</span>
+                    </div>
+                    <h3>RabbitMQ Management</h3>
+                    <p>Observe message brokers, exchanges, queues, and channel activity.</p>
+                    <a href="http://localhost:15672/" target="_blank" class="btn">Open Console</a>
+                </div>
+
+            </div>
+
+            <!-- Health Monitoring Section -->
+            <h2 class="section-title">❤️ Live Health Status Check</h2>
+            <div class="checklist-card">
+                <div class="health-list">
+                    <div class="health-item">
+                        <div class="health-info">
+                            <div class="health-indicator" id="config-health"></div>
+                            <div>
+                                <div style="display:flex; align-items:center; gap: 0.5rem;">
+                                    <span class="health-name">Config Server</span>
+                                    <span class="health-status-badge" id="config-health-text">checking</span>
+                                </div>
+                                <div class="health-endpoint">/config-server/actuator/health</div>
+                            </div>
+                        </div>
+                        <a href="/config-server/actuator/health" id="config-health-link" target="_blank" class="btn btn-outline">Raw JSON</a>
+                    </div>
+                    <div class="health-item">
+                        <div class="health-info">
+                            <div class="health-indicator" id="eureka-health"></div>
+                            <div>
+                                <div style="display:flex; align-items:center; gap: 0.5rem;">
+                                    <span class="health-name">Eureka Server</span>
+                                    <span class="health-status-badge" id="eureka-health-text">checking</span>
+                                </div>
+                                <div class="health-endpoint">/eureka-server/actuator/health</div>
+                            </div>
+                        </div>
+                        <a href="/eureka-server/actuator/health" id="eureka-health-link" target="_blank" class="btn btn-outline">Raw JSON</a>
+                    </div>
+                    <div class="health-item">
+                        <div class="health-info">
+                            <div class="health-indicator" id="gateway-health"></div>
+                            <div>
+                                <div style="display:flex; align-items:center; gap: 0.5rem;">
+                                    <span class="health-name">API Gateway</span>
+                                    <span class="health-status-badge" id="gateway-health-text">checking</span>
+                                </div>
+                                <div class="health-endpoint">/actuator/health</div>
+                            </div>
+                        </div>
+                        <a href="/actuator/health" id="gateway-health-link" target="_blank" class="btn btn-outline">Raw JSON</a>
+                    </div>
+                    <div class="health-item">
+                        <div class="health-info">
+                            <div class="health-indicator" id="auth-health"></div>
+                            <div>
+                                <div style="display:flex; align-items:center; gap: 0.5rem;">
+                                    <span class="health-name">Authentication Service</span>
+                                    <span class="health-status-badge" id="auth-health-text">checking</span>
+                                </div>
+                                <div class="health-endpoint">/auth-service/actuator/health</div>
+                            </div>
+                        </div>
+                        <a href="/auth-service/actuator/health" id="auth-health-link" target="_blank" class="btn btn-outline">Raw JSON</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cluster Topology Section -->
+            <h2 class="section-title" style="margin-top: 2.5rem;">📡 Live Service Registry (Eureka)</h2>
+            <div class="checklist-card">
+                <div id="registered-apps-list" style="display:flex; flex-direction:column; gap:0.75rem;">
+                    <div style="color:var(--text-muted); font-size:0.9rem;">Connecting to registry...</div>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <!-- Command Console Cheat Sheet -->
+            <h2 class="section-title">⌨️ Developer Quick Console</h2>
+            <div class="cli-card">
+                <div class="code-container">
+                    
+                    <div class="command-block">
+                        <div class="command-desc">🚀 Register & Provision New Microservice (Node/Python)</div>
+                        <div class="command-line" id="cmd-register">./scripts/register-service.sh [service-name] [nodejs|python]</div>
+                        <button class="copy-btn" onclick="copyText('cmd-register')">📋</button>
+                    </div>
+
+                    <div class="command-block">
+                        <div class="command-desc">🔄 Hot-Reload API Gateway Routing Context</div>
+                        <div class="command-line" id="cmd-refresh">docker exec gateway curl -k -X POST https://localhost:8080/actuator/refresh && docker exec gateway curl -k -X POST https://localhost:8080/actuator/gateway/refresh</div>
+                        <button class="copy-btn" onclick="copyText('cmd-refresh')">📋</button>
+                    </div>
+
+                    <div class="command-block">
+                        <div class="command-desc">🔑 Import Client Certificate to Linux NSS (Brave/Chrome)</div>
+                        <div class="command-line" id="cmd-cert">pk12util -d sql:$HOME/.pki/nssdb -i certs/services/gateway/gateway.p12 -W password</div>
+                        <button class="copy-btn" onclick="copyText('cmd-cert')">📋</button>
+                    </div>
+
+                    <div class="command-block">
+                        <div class="command-desc">🐳 Run stack orchestration wrapper script</div>
+                        <div class="command-line" id="cmd-docker">./scripts/docker.sh [up|down|infra|apps|restart]</div>
+                        <button class="copy-btn" onclick="copyText('cmd-docker')">📋</button>
+                    </div>
+
+                    <div class="command-block">
+                        <div class="command-desc">📝 Query Registered Apps from Eureka Registry</div>
+                        <div class="command-line" id="cmd-query">curl -k --cert certs/services/gateway/gateway.crt --key certs/services/gateway/gateway.key -H "Accept: application/json" https://localhost:8761/eureka/apps</div>
+                        <button class="copy-btn" onclick="copyText('cmd-query')">📋</button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <p>Transcendence Cluster Developer Environment · Built securely with mTLS and Spring Cloud</p>
+    </footer>
+
+    <script>
+        function copyText(id) {
+            const text = document.getElementById(id).innerText;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Copied to clipboard!');
+            });
+        }
+
+        // Live Health Polling Logic
+        const services = [
+            { id: 'config-health', url: '/config-server/actuator/health' },
+            { id: 'eureka-health', url: '/eureka-server/actuator/health' },
+            { id: 'gateway-health', url: '/actuator/health' },
+            { id: 'auth-health', url: '/auth-service/actuator/health' }
+        ];
+
+        // Adaptive URLs if page is opened as static file: file:///...
+        const isLocalFile = window.location.protocol === 'file:';
+        if (isLocalFile) {
+            services[0].url = 'https://localhost:8888/actuator/health';
+            services[1].url = 'https://localhost:8761/actuator/health';
+            services[2].url = 'https://localhost:8080/actuator/health';
+            services[3].url = 'https://localhost:8080/auth-service/actuator/health';
+            
+            // Adjust raw JSON links to be absolute as well
+            document.getElementById('config-health-link').href = 'https://localhost:8888/actuator/health';
+            document.getElementById('eureka-health-link').href = 'https://localhost:8761/actuator/health';
+            document.getElementById('gateway-health-link').href = 'https://localhost:8080/actuator/health';
+            document.getElementById('auth-health-link').href = 'https://localhost:8080/auth-service/actuator/health';
+        }
+
+        async function checkHealth(service) {
+            const indicator = document.getElementById(service.id);
+            const badge = document.getElementById(service.id + '-text');
+            
+            try {
+                const response = await fetch(service.url, { 
+                    method: 'GET',
+                    mode: 'cors',
+                    credentials: 'omit'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.status === 'UP') {
+                        indicator.className = 'health-indicator active';
+                        badge.innerText = 'UP';
+                        badge.style.color = '#ffffff';
+                        badge.style.background = 'rgba(16, 185, 129, 0.2)';
+                    } else {
+                        indicator.className = 'health-indicator down';
+                        badge.innerText = 'DOWN';
+                        badge.style.color = '#ffffff';
+                        badge.style.background = 'rgba(239, 68, 68, 0.2)';
+                    }
+                } else {
+                    indicator.className = 'health-indicator warning';
+                    badge.innerText = `ERR ${response.status}`;
+                    badge.style.color = '#ffffff';
+                    badge.style.background = 'rgba(245, 158, 11, 0.2)';
+                }
+            } catch (err) {
+                // SSL Handshake block or CORS restriction
+                indicator.className = 'health-indicator warning';
+                badge.innerText = 'SSL / BLOCKED';
+                badge.style.color = '#ffffff';
+                badge.style.background = 'rgba(245, 158, 11, 0.2)';
+            }
+        }
+
+        async function fetchRegisteredApps() {
+            const container = document.getElementById('registered-apps-list');
+            try {
+                // Query Eureka registry via local/proxied route
+                const registryUrl = isLocalFile ? 'https://localhost:8761/eureka/apps' : '/eureka-server/eureka/apps';
+                const response = await fetch(registryUrl, {
+                    headers: { 'Accept': 'application/json' }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    const appsList = data.applications.application || [];
+                    const apps = Array.isArray(appsList) ? appsList : [appsList];
+                    
+                    if (apps.length === 0 || (apps.length === 1 && !apps[0])) {
+                        container.innerHTML = '<div style="color:var(--text-muted); font-size:0.95rem; text-align:center; padding:1rem 0;">No active microservices registered in Eureka.</div>';
+                        return;
+                    }
+                    
+                    let html = '';
+                    apps.forEach(app => {
+                        const instancesList = app.instance || [];
+                        const instances = Array.isArray(instancesList) ? instancesList : [instancesList];
+                        
+                        instances.forEach(inst => {
+                            const portVal = inst.port && inst.port['$'] ? inst.port['$'] : 'unknown';
+                            const serviceColor = app.name.includes('GATEWAY') ? '#6366f1' : 
+                                                 app.name.includes('AUTH') ? '#a855f7' : '#10b981';
+                            
+                            html += `
+                                <div style="display:flex; justify-content:space-between; align-items:center; padding:0.75rem 1rem; background:rgba(255,255,255,0.02); border:1px solid var(--card-border); border-radius:10px;">
+                                    <div>
+                                        <div style="font-weight:700; font-size:0.95rem; color:${serviceColor}; letter-spacing:0.02em;">${app.name}</div>
+                                        <div style="font-size:0.8rem; color:var(--text-muted); font-family:var(--mono-font); margin-top:0.15rem;">
+                                            ${inst.instanceId} (${inst.ipAddr}:${portVal})
+                                        </div>
+                                    </div>
+                                    <span style="font-size:0.75rem; font-weight:700; color:#10b981; background:rgba(16, 185, 129, 0.15); border:1px solid rgba(16, 185, 129, 0.25); padding:0.2rem 0.5rem; border-radius:6px;">${inst.status}</span>
+                                </div>
+                            `;
+                        });
+                    });
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = `<div style="color:var(--danger); font-size:0.95rem; text-align:center; padding:1rem 0;">Failed to load registry (${response.status})</div>`;
+                }
+            } catch (err) {
+                container.innerHTML = '<div style="color:var(--warning); font-size:0.95rem; text-align:center; padding:1rem 0;">Eureka registry unreachable (check SSL trust or CORS)</div>';
+            }
+        }
+
+        function pollAll() {
+            services.forEach(checkHealth);
+            fetchRegisteredApps();
+        }
+
+        // Poll immediately, then every 5 seconds
+        pollAll();
+        setInterval(pollAll, 5000);
+    </script>
+</body>
+</html>
 
 ```
 
-## 📄 File: ./config/config-repo/auth-service/auth-service.yaml
-```yaml
-# ==========================================
-# AUTH SERVICE CORE BASE CONFIGURATION
-# ==========================================
+## 📄 File: ./services/gateway/src/test/java/com/ft_transcendence/gateway/GatewayApplicationTests.java
+```java
+package com.ft_transcendence.gateway;
 
-server:
-  port: ${AUTH_SERVICE_PORT}
-  forward-headers-strategy: framework
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
 
-spring:
-  # == 1. Database Driver & Schema Config ==
-  datasource:
-    username: "${DB_USER}"
-    password: "${DB_PASSWORD}"
-    driver-class-name: org.postgresql.Driver
-  
-  jpa:
-    hibernate:
-      ddl-auto: update
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
+@SpringBootTest
+class GatewayApplicationTests {
 
-  # == 2. Redis Connection & Session Management ==
-  session:
-    timeout: 7d
-    data:
-      redis:
-        namespace: "transcendence"
-        save-mode: on-set-attribute
-        repository-type: indexed
-  data:
-    redis:
-      port: ${REDIS_PORT}
-      password: "${REDIS_PASSWORD}"
+    @Test
+    void contextLoads() {
+    }
 
-# ==========================================
-# OPENAPI / SWAGGER DOCUMENTATION CONFIGURATION
-# ==========================================
-springdoc:
-  server-url: "https://localhost:${GATEWAY_PORT}/api/auth"
+}
 
 ```
 
-## 📄 File: ./config/config-repo/application-dev.yaml
-```yaml
+## 📄 File: ./templates/python-fastapi/Dockerfile
+```dockerfile
 # ==========================================
-#  Application Dev Configuration
+# BUILD STAGE
 # ==========================================
+FROM python:3.11-alpine AS builder
+WORKDIR /app
 
-spring:
-  ssl:
-    bundle:
-      jks:
-        microservice-bundle:
-          keystore:
-            location: "file:${CERT_DIR_PATH}/services/${spring.application.name}/${spring.application.name}.p12"
-          truststore:
-            location: "file:${CERT_DIR_PATH}/truststore/truststore.p12"
+# Install compilation dependencies for cryptography if needed
+RUN apk add --no-cache gcc musl-dev libffi-dev openssl-dev cargo
 
-eureka:
-  instance:
-    hostname: localhost
-  client:
-    service-url:
-      defaultZone: https://localhost:${EUREKA_PORT}/eureka/
-    tls:
-      key-store: "file:${CERT_DIR_PATH}/services/${spring.application.name}/${spring.application.name}.p12"
-      trust-store: "file:${CERT_DIR_PATH}/truststore/truststore.p12"
+# Cache python requirements for rapid builds
+COPY requirements.txt .
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# ==========================================
+# RUN STAGE
+# ==========================================
+FROM python:3.11-alpine
+WORKDIR /app
+
+# Install curl for robust healthcheck support
+RUN apk add --no-cache curl
+
+# Copy installed python packages from builder
+COPY --from=builder /install /usr/local
+COPY . .
+
+ENV PYTHONUNBUFFERED=1
+
+EXPOSE 8082
+
+# Start the application
+ENTRYPOINT ["python", "app.py"]
+
+
 ```
 
-## 📄 File: ./config/config-repo/application-docker.yaml
-```yaml
-# ==========================================
-#  Application Docker Configuration
-# ==========================================
-
-spring:
-  ssl:
-    bundle:
-      jks:
-        microservice-bundle:
-          keystore:
-            location: "file:/app/certs/services/${spring.application.name}/${spring.application.name}.p12"
-          truststore:
-            location: "file:/app/certs/truststore/truststore.p12"
-
-eureka:
-  instance:
-    hostname: ${spring.application.name}
-  client:
-    service-url:
-      defaultZone: https://eureka-server:${EUREKA_PORT}/eureka/
-    tls:
-      key-store: "file:/app/certs/services/${spring.application.name}/${spring.application.name}.p12"
-      trust-store: "file:/app/certs/truststore/truststore.p12"
-```
-
-## 📄 File: ./config/config-repo/application.yaml
-```yaml
-# ==========================================
-# GLOBAL MICROSERVICE CONFIGURATION
-# ==========================================
-
-# == 1. Centralized Modern SSL Bundles ==
-spring:
-  ssl:
-    bundle:
-      jks:
-        microservice-bundle:
-          key:
-            alias: "${spring.application.name}"
-            password: "${CERT_PASSWORD}"
-          keystore:
-            password: "${CERT_PASSWORD}"
-            type: "PKCS12"
-          truststore:
-            password: "${CERT_PASSWORD}"
-            type: "PKCS12"
-  mvc:
-    problemdetails:
-      enabled: true
-  webflux:
-    problemdetails:
-      enabled: true
-
-# == 2. Inbound Server Configuration (Uses Modern Bundle) ==
-server:
-  ssl:
-    enabled: true
-    client-auth: need
-    bundle: microservice-bundle # Tomcat/Netty use the bundle natively
-  error:
-    include-stacktrace: never
-    include-message: always
-    include-binding-errors: always
-    include-exception: false
-
-# == 3. Eureka Discovery Configuration (Hybrid Layer) ==
-eureka:
-  instance:
-    prefer-ip-address: false
-    secure-port-enabled: true
-    non-secure-port-enabled: false
-  client:
-    fetch-registry: true
-    register-with-eureka: true
-    tls:
-      enabled: true
-      # Old-school properties provided explicitly for legacy client/server registration stability
-      key-password: "${CERT_PASSWORD}"
-      key-store-password: "${CERT_PASSWORD}"
-      key-store-type: "PKCS12"
-      trust-store-password: "${CERT_PASSWORD}"
-      trust-store-type: "PKCS12"
-
-# == 4. Observability & Logging ==
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,gateway
-  endpoint:
-    health:
-      show-details: always
-
-logging:
-  pattern:
-    console: "%d{HH:mm:ss.SSS} %clr([%36X{trace_id}]){cyan} %clr(%-5level) %clr(%logger{36}){magenta} - %msg%n"
-  level:
-    # Prevent common, expected client input errors (like 400 Bad Request or 401 Unauthorized) 
-    # from dumping massive multi-page warning stacks into your console logs.
-    org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler: WARN
-    org.springframework.web.server.handler.ResponseStatusExceptionHandler: WARN
-
-# == 5. API Documentation ==
-app:
-  error-docs-url: "https://api.transcendence.com/errors/"
-```
-
-## 📄 File: ./docker/docker-compose.yml
+## 📄 File: ./templates/python-fastapi/docker-compose.fragment.yml
 ```yaml
 services:
-  postgres-db:
-    image: postgres:15-alpine
-    container_name: postgres-db
-    ports:
-      - "${POSTGRES_PORT}:5432"
-    environment:
-      - POSTGRES_USER=${DB_USER}
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
-      - POSTGRES_DB=${DB_NAME}
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - transcendence-net
-
-  redis-container:
-    image: redis:7-alpine
-    container_name: redis-container
-    ports:
-      - "${REDIS_PORT}:6379"
-    command: redis-server --requirepass ${REDIS_PASSWORD}
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    volumes:
-      - redis_data:/data
-    networks:
-      - transcendence-net
-
-  redis-commander:
-    image: rediscommander/redis-commander:latest
-    container_name: redis-commander
-    environment:
-      - REDIS_HOST=redis-container
-      - REDIS_PORT=${REDIS_PORT}               # Always use the container's internal port here
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-    ports:
-      - "6381:8081"                   # Binds your laptop's 6381 to container's 8081
-    networks:
-      - transcendence-net
-    depends_on:
-      - redis-container
-
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: rabbitmq
-    ports:
-      - "${RABBITMQ_PORT}:5672"    # AMQP — your services connect here
-      - "${RABBITMQ_MANAGEMENT_PORT}:15672"  # management UI — http://localhost:15672
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    networks:
-      - transcendence-net
-
-
-volumes:
-  redis_data:
-  postgres_data:
-  rabbitmq_data:
-
-networks:
-  transcendence-net:
-    name: transcendence-net
-    driver: bridge
-```
-
-## 📄 File: ./docker/docker-compose.apps.yml
-```yaml
-# ==========================================
-# TRANSCENDENCE MICROSERVICES APPLICATION STACK
-# ==========================================
-# Run after starting the infrastructure compose stack:
-# docker compose -f docker-compose.yml up -d
-# docker compose -f docker-compose.apps.yml up --build -d
-
-services:
-  # == 1. Spring Cloud Config Server (Internal Only) ==
-  config-server:
+  python-service:
     build:
-      context: ../services/config-server
+      context: ./templates/python-fastapi # Path to the service folder
       dockerfile: Dockerfile
-    image: transcendence-config-server:latest
-    container_name: config-server
+    image: transcendence-python-service:latest
+    container_name: python-service
     environment:
-      - SPRING_PROFILES_ACTIVE=native,docker
-      - CONFIG_SERVER_PORT=${CONFIG_SERVER_PORT}
+      - PORT=8082
+      - SPRING_APPLICATION_NAME=python-service
+      - EUREKA_URL=https://eureka-server:8761/eureka/
+      - CERT_DIR_PATH=/app/certs
+      - JWKS_URI=https://gateway:8080/.well-known/jwks.json
+      - JWT_PUBLIC_KEY_PATH=/app/certs/jwt/jwt_public.pem
       - CERT_PASSWORD=${CERT_PASSWORD}
     volumes:
-      - ../certs:/app/certs:ro             # Mounts secure mTLS keystores/truststores
-      - ../config/config-repo:/app/config-repo:ro # Mounts local git configuration repository
+      - ./certs:/app/certs:ro # Mount the mTLS certificates directory read-only
     healthcheck:
-      test: [ "CMD", "curl", "-k", "--cert", "/app/certs/services/config-server/config-server.p12:${CERT_PASSWORD}", "--cert-type", "P12", "-f", "https://localhost:${CONFIG_SERVER_PORT}/actuator/health" ]
+      # Perform mTLS curls for docker healthchecking
+      test: [ "CMD", "curl", "-k", "--cert", "/app/certs/services/python-service/python-service.crt", "--key", "/app/certs/services/python-service/python-service.key", "-f", "https://localhost:8082/actuator/health" ]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 15s
-    networks:
-      - transcendence-net
-
-  # == 2. Eureka Service Discovery Registry (Internal Only) ==
-  eureka-server:
-    build:
-      context: ../services/eureka-server
-      dockerfile: Dockerfile
-    image: transcendence-eureka-server:latest
-    container_name: eureka-server
-    environment:
-      - SPRING_PROFILES_ACTIVE=docker
-      - EUREKA_PORT=${EUREKA_PORT}
-      - CONFIG_SERVER_PORT=${CONFIG_SERVER_PORT}
-      - CERT_PASSWORD=${CERT_PASSWORD}
-    volumes:
-      - ../certs:/app/certs:ro
-    healthcheck:
-      test: [ "CMD", "curl", "-k", "--cert", "/app/certs/services/eureka-server/eureka-server.p12:${CERT_PASSWORD}", "--cert-type", "P12", "-f", "https://localhost:${EUREKA_PORT}/actuator/health" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
+      start_period: 10s
     depends_on:
-      config-server:
-        condition: service_healthy
-    networks:
-      - transcendence-net
-
-  # == 3. Core Authentication Service (Internal Only) ==
-  auth-service:
-    build:
-      context: ../services/auth-service
-      dockerfile: Dockerfile
-    image: transcendence-auth-service:latest
-    container_name: auth-service
-    environment:
-      - SPRING_PROFILES_ACTIVE=docker
-      - AUTH_SERVICE_PORT=${AUTH_SERVICE_PORT}
-      - CONFIG_SERVER_PORT=${CONFIG_SERVER_PORT}
-      - EUREKA_PORT=${EUREKA_PORT}
-      - CERT_PASSWORD=${CERT_PASSWORD}
-      - DB_NAME=${DB_NAME}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - POSTGRES_PORT=${POSTGRES_PORT}
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - REDIS_PORT=${REDIS_PORT}
-      - GATEWAY_PORT=${GATEWAY_PORT}
-    volumes:
-      - ../certs:/app/certs:ro
-    healthcheck:
-      test: [ "CMD", "curl", "-k", "--cert", "/app/certs/services/auth-service/auth-service.p12:${CERT_PASSWORD}", "--cert-type", "P12", "-f", "https://localhost:${AUTH_SERVICE_PORT}/actuator/health" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-    depends_on:
-      config-server:
+      gateway:
         condition: service_healthy
       eureka-server:
         condition: service_healthy
     networks:
       - transcendence-net
 
-  # == 4. Backend-For-Frontend (BFF) Gateway (Public Entrypoint) ==
-  gateway:
+```
+
+## 📄 File: ./templates/nodejs-express/eureka.js
+```javascript
+const fs = require('fs');
+const path = require('path');
+const https = require('https');
+const axios = require('axios');
+
+class EurekaClient {
+    constructor({ appName, hostName, port, eurekaUrl, certDir }) {
+        this.appName = appName.toUpperCase();
+        this.hostName = hostName;
+        this.port = parseInt(port, 10);
+        this.eurekaUrl = eurekaUrl.replace(/\/$/, ''); // strip trailing slash
+        
+        // Setup certificate paths
+        const certPath = path.join(certDir, 'services', appName, `${appName}.crt`);
+        const keyPath = path.join(certDir, 'services', appName, `${appName}.key`);
+        const caPath = path.join(certDir, 'rootCA', 'rootCA.crt');
+        
+        this.instanceId = `${this.hostName}:${this.appName.toLowerCase()}:${this.port}`;
+        
+        // Build mTLS HTTPS Agent for Axios
+        this.httpsAgent = new https.Agent({
+            cert: fs.readFileSync(certPath),
+            key: fs.readFileSync(keyPath),
+            ca: fs.readFileSync(caPath),
+            rejectUnauthorized: true
+        });
+        
+        this.client = axios.create({
+            httpsAgent: this.httpsAgent,
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        this.heartbeatInterval = null;
+    }
+
+    async register() {
+        const url = `${this.eurekaUrl}/apps/${this.appName}`;
+        const payload = {
+            instance: {
+                instanceId: this.instanceId,
+                hostName: this.hostName,
+                app: this.appName,
+                ipAddr: this.hostName,
+                status: 'UP',
+                port: {
+                    '$': this.port,
+                    '@enabled': 'false' // Disable unsecure port
+                },
+                securePort: {
+                    '$': this.port,
+                    '@enabled': 'true' // Route only via HTTPS securePort
+                },
+                vipAddress: this.appName.toLowerCase(),
+                secureVipAddress: this.appName.toLowerCase(),
+                dataCenterInfo: {
+                    '@class': 'com.netflix.appinfo.InstanceInfo$DefaultDataCenterInfo',
+                    name: 'MyOwn'
+                }
+            }
+        };
+
+        try {
+            console.log(`[Eureka] Registering service at ${url}...`);
+            const response = await this.client.post(url, payload);
+            if (response.status === 204 || response.status === 200) {
+                console.log('[Eureka] Successfully registered with Eureka!');
+                return true;
+            }
+            console.error(`[Eureka] Unexpected registration status: ${response.status}`);
+            return false;
+        } catch (error) {
+            console.error(`[Eureka] Registration failed: ${error.message}`);
+            if (error.response) {
+                console.error(`[Eureka] Details: ${JSON.stringify(error.response.data)}`);
+            }
+            return false;
+        }
+    }
+
+    async sendHeartbeat() {
+        const url = `${this.eurekaUrl}/apps/${this.appName}/${this.instanceId}`;
+        try {
+            const response = await this.client.put(url);
+            if (response.status === 200) {
+                // Heartbeat successful
+                return true;
+            } else {
+                console.error(`[Eureka] Heartbeat failed with status: ${response.status}`);
+                return false;
+            }
+        } catch (error) {
+            if (error.response && error.response.status === 404) {
+                console.warn('[Eureka] Server returned 404. Re-registering instance...');
+                await this.register();
+                return false;
+            }
+            console.error(`[Eureka] Heartbeat connection error: ${error.message}`);
+            return false;
+        }
+    }
+
+    async deregister() {
+        const url = `${this.eurekaUrl}/apps/${this.appName}/${this.instanceId}`;
+        try {
+            console.log(`[Eureka] Deregistering service at ${url}...`);
+            const response = await this.client.delete(url);
+            if (response.status === 200) {
+                console.log('[Eureka] Successfully deregistered from Eureka.');
+                return true;
+            }
+            console.error(`[Eureka] Failed to deregister: Status ${response.status}`);
+            return false;
+        } catch (error) {
+            console.error(`[Eureka] Deregistration error: ${error.message}`);
+            return false;
+        }
+    }
+
+    start() {
+        this.register().then(registered => {
+            if (registered) {
+                // Maintain heartbeat every 30 seconds
+                this.heartbeatInterval = setInterval(() => {
+                    this.sendHeartbeat();
+                }, 30000);
+                console.log('[Eureka] Heartbeat scheduler started (30s interval).');
+            }
+        });
+    }
+
+    stop() {
+        console.log('[Eureka] Stopping Eureka client...');
+        if (this.heartbeatInterval) {
+            clearInterval(this.heartbeatInterval);
+        }
+        return this.deregister();
+    }
+}
+
+module.exports = EurekaClient;
+
+```
+
+## 📄 File: ./templates/nodejs-express/jwt-validator.js
+```javascript
+const fs = require('fs');
+const path = require('path');
+const https = require('https');
+const jwt = require('jsonwebtoken');
+const jwksClient = require('jwks-rsa');
+
+class JwtValidator {
+    constructor({ appName, certDir, jwksUri, publicKeyPath }) {
+        this.appName = appName;
+        this.certDir = certDir;
+        this.jwksUri = jwksUri;
+        this.publicKeyPath = publicKeyPath;
+        
+        // Load certificates for fetching JWKS if needed
+        const certPath = path.join(certDir, 'services', appName, `${appName}.crt`);
+        const keyPath = path.join(certDir, 'services', appName, `${appName}.key`);
+        const caPath = path.join(certDir, 'rootCA', 'rootCA.crt');
+        
+        // Local public key fallback
+        this.localPublicKey = null;
+        if (this.publicKeyPath && fs.existsSync(this.publicKeyPath)) {
+            try {
+                this.localPublicKey = fs.readFileSync(this.publicKeyPath, 'utf8');
+                console.log(`[JWT] Loaded local public key from ${this.publicKeyPath}`);
+            } catch (err) {
+                console.error(`[JWT] Failed to read local public key: ${err.message}`);
+            }
+        }
+        
+        // Build mTLS Agent for JWKS client
+        if (!this.localPublicKey && this.jwksUri) {
+            const httpsAgent = new https.Agent({
+                cert: fs.readFileSync(certPath),
+                key: fs.readFileSync(keyPath),
+                ca: fs.readFileSync(caPath),
+                rejectUnauthorized: true
+            });
+            
+            this.jwksClient = jwksClient({
+                jwksUri: this.jwksUri,
+                requestAgent: httpsAgent,
+                cache: true,
+                cacheMaxEntries: 5,
+                cacheMaxAge: 24 * 60 * 60 * 1000 // 24 hours (matches JWKS Cache-Control)
+            });
+            console.log(`[JWT] Initialized JWKS client pointing to ${this.jwksUri}`);
+        }
+    }
+
+    // Helper to get public key for a specific JWT header
+    getSigningKey(header, callback) {
+        if (this.localPublicKey) {
+            return callback(null, this.localPublicKey);
+        }
+        
+        if (!this.jwksClient) {
+            return callback(new Error('No JWKS client or local public key available'));
+        }
+        
+        this.jwksClient.getSigningKey(header.kid, (err, key) => {
+            if (err) {
+                return callback(err);
+            }
+            const signingKey = key.getPublicKey();
+            callback(null, signingKey);
+        });
+    }
+
+    // Express middleware function
+    getMiddleware(excludePaths = []) {
+        return (req, res, next) => {
+            // Bypass validation for public/health paths
+            const isExcluded = excludePaths.some(p => req.path.startsWith(p));
+            if (isExcluded) {
+                return next();
+            }
+            
+            const authHeader = req.headers.authorization;
+            if (!authHeader || !authHeader.startsWith('Bearer ')) {
+                return res.status(401).json({
+                    detail: 'Missing or invalid Authorization header. A bearer transit JWT is required.'
+                });
+            }
+            
+            const token = authHeader.split(' ')[1];
+            
+            // Verify signature using the dynamically retrieved signing key
+            this.getSigningKey(jwt.decode(token, { complete: true })?.header || {}, (err, signingKey) => {
+                if (err) {
+                    console.error(`[JWT] Error fetching signing key: ${err.message}`);
+                    return res.status(401).json({ detail: 'Invalid transit token signing key' });
+                }
+                
+                jwt.verify(token, signingKey, {
+                    algorithms: ['RS256'],
+                    issuer: 'transcendence-gateway'
+                }, (verifyErr, decoded) => {
+                    if (verifyErr) {
+                        console.warn(`[JWT] Token verification failed: ${verifyErr.message}`);
+                        return res.status(401).json({ detail: `Invalid transit token: ${verifyErr.message}` });
+                    }
+                    
+                    // Inject claims into request context for handlers to read
+                    req.user = {
+                        id: decoded.sub,
+                        roles: decoded.roles || [],
+                        sessionId: decoded.sid,
+                        traceId: decoded.tid
+                    };
+                    
+                    next();
+                });
+            });
+        };
+    }
+}
+
+module.exports = JwtValidator;
+
+```
+
+## 📄 File: ./templates/nodejs-express/server.js
+```javascript
+const fs = require('fs');
+const path = require('path');
+const https = require('https');
+const express = require('express');
+const EurekaClient = require('./eureka');
+const JwtValidator = require('./jwt-validator');
+
+// Configuration loading from environment variables
+const APP_NAME = process.env.SPRING_APPLICATION_NAME || 'nodejs-service';
+const PORT = parseInt(process.env.PORT || '8083', 10);
+const EUREKA_URL = process.env.EUREKA_URL || 'https://localhost:8761/eureka/';
+const CERT_DIR = process.env.CERT_DIR_PATH || './certs';
+const JWKS_URI = process.env.JWKS_URI || 'https://localhost:8080/.well-known/jwks.json';
+const JWT_PUBLIC_KEY_PATH = process.env.JWT_PUBLIC_KEY_PATH || path.join(CERT_DIR, 'jwt', 'jwt_public.pem');
+
+const app = express();
+app.use(express.json());
+
+// Initialize JWT validator
+const jwtValidator = new JwtValidator({
+    appName: APP_NAME,
+    certDir: CERT_DIR,
+    jwksUri: JWKS_URI,
+    publicKeyPath: JWT_PUBLIC_KEY_PATH
+});
+
+// Exclude Swagger UI docs and health checks from JWT security
+const excludePaths = [
+    '/health',
+    '/actuator/health',
+    '/api-docs'
+];
+
+app.use(jwtValidator.getMiddleware(excludePaths));
+
+// Initialize Eureka client
+const eurekaClient = new EurekaClient({
+    appName: APP_NAME,
+    hostName: APP_NAME, // resolves inside docker bridge network
+    port: PORT,
+    eurekaUrl: EUREKA_URL,
+    certDir: CERT_DIR
+});
+
+// ── Health Endpoints ──────────────────────────────────────────────────────────
+app.get(['/health', '/actuator/health'], (req, res) => {
+    res.json({
+        status: 'UP',
+        details: {
+            database: 'UP',
+            cache: 'UP'
+        }
+    });
+});
+
+// ── Secure Endpoint ────────────────────────────────────────────────────────────
+app.get('/hello', (req, res) => {
+    const user = req.user;
+    console.log(`[Trace: ${user.traceId}] User ${user.id} accessed node hello endpoint.`);
+    
+    res.json({
+        message: 'Hello from Node.js Express service! You are authenticated.',
+        principal: {
+            userId: user.id,
+            roles: user.roles,
+            sessionId: user.sessionId,
+            traceId: user.traceId
+        }
+    });
+});
+
+// ── HTTPS Server-side mTLS Boot ────────────────────────────────────────────────
+const sslCert = path.join(CERT_DIR, 'services', APP_NAME, `${APP_NAME}.crt`);
+const sslKey = path.join(CERT_DIR, 'services', APP_NAME, `${APP_NAME}.key`);
+const sslCa = path.join(CERT_DIR, 'rootCA', 'rootCA.crt');
+
+if (!fs.existsSync(sslCert) || !fs.existsSync(sslKey)) {
+    console.error(`[Error] Required certificates missing. Expected: \n - Cert: ${sslCert}\n - Key: ${sslKey}`);
+    console.error(`Please run './scripts/mtls-setup.sh add nodejs-service' to generate them first.`);
+    process.exit(1);
+}
+
+const httpsOptions = {
+    key: fs.readFileSync(sslKey),
+    cert: fs.readFileSync(sslCert),
+    ca: fs.readFileSync(sslCa),
+    requestCert: true,          // Require client certificate
+    rejectUnauthorized: true   // Verify client certificate matches CA
+};
+
+const server = https.createServer(httpsOptions, app);
+
+server.listen(PORT, () => {
+    console.log(`[mTLS HTTPS] Node.js server running securely on port ${PORT}...`);
+    // Start Eureka registration & heartbeats
+    eurekaClient.start();
+});
+
+// Handle graceful shutdown
+const gracefulShutdown = () => {
+    console.log('Received shutdown signal. Stopping Eureka client and closing server...');
+    eurekaClient.stop().finally(() => {
+        server.close(() => {
+            console.log('HTTPS Server closed. Exiting process.');
+            process.exit(0);
+        });
+    });
+};
+
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);
+
+```
+
+## 📄 File: ./templates/nodejs-express/Dockerfile
+```dockerfile
+# ==========================================
+# BUILD STAGE
+# ==========================================
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+# Cache NPM packages for rapid rebuilds
+COPY package*.json ./
+RUN npm install --only=production
+
+
+# ==========================================
+# RUN STAGE
+# ==========================================
+FROM node:20-alpine
+WORKDIR /app
+
+# Install curl for robust healthcheck support
+RUN apk add --no-cache curl
+
+# Copy dependencies and source from builder
+COPY --from=builder /app/node_modules ./node_modules
+COPY . .
+
+EXPOSE 8083
+
+# Run the node process directly
+ENTRYPOINT ["node", "server.js"]
+
+```
+
+## 📄 File: ./templates/nodejs-express/docker-compose.fragment.yml
+```yaml
+services:
+  nodejs-service:
     build:
-      context: ../services/gateway
+      context: ./templates/nodejs-express # Path to the service folder
       dockerfile: Dockerfile
-    image: transcendence-gateway:latest
-    container_name: gateway
-    ports:
-      - "${GATEWAY_PORT}:${GATEWAY_PORT}" # ONLY the Gateway is exposed to the host system!
+    image: transcendence-nodejs-service:latest
+    container_name: nodejs-service
     environment:
-      - SPRING_PROFILES_ACTIVE=docker
-      - GATEWAY_PORT=${GATEWAY_PORT}
-      - CONFIG_SERVER_PORT=${CONFIG_SERVER_PORT}
-      - EUREKA_PORT=${EUREKA_PORT}
+      - PORT=8083
+      - SPRING_APPLICATION_NAME=nodejs-service
+      - EUREKA_URL=https://eureka-server:8761/eureka/
+      - CERT_DIR_PATH=/app/certs
+      - JWKS_URI=https://gateway:8080/.well-known/jwks.json
+      - JWT_PUBLIC_KEY_PATH=/app/certs/jwt/jwt_public.pem
       - CERT_PASSWORD=${CERT_PASSWORD}
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - REDIS_PORT=${REDIS_PORT}
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
-      - FRONTEND_BASE_URL=${FRONTEND_BASE_URL:-http://localhost:5173}
     volumes:
-      - ../certs:/app/certs:ro
+      - ./certs:/app/certs:ro # Mount the mTLS certificates directory read-only
     healthcheck:
-      test: [ "CMD", "curl", "-k", "--cert", "/app/certs/services/gateway/gateway.p12:${CERT_PASSWORD}", "--cert-type", "P12", "-f", "https://localhost:${GATEWAY_PORT}/actuator/health" ]
+      # Perform mTLS curls for docker healthchecking
+      test: [ "CMD", "curl", "-k", "--cert", "/app/certs/services/nodejs-service/nodejs-service.crt", "--key", "/app/certs/services/nodejs-service/nodejs-service.key", "-f", "https://localhost:8083/actuator/health" ]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 20s
+      start_period: 10s
     depends_on:
-      config-server:
+      gateway:
         condition: service_healthy
       eureka-server:
-        condition: service_healthy
-      auth-service:
         condition: service_healthy
     networks:
       - transcendence-net
 
-# == 5. Bridge Network Connectivity ==
-networks:
-  transcendence-net:
-    external: true # Connects seamlessly to the pre-existing infrastructure network
-
 ```
 
-## 📄 File: ./scripts/dev-start.sh
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-# Establish root directory execution path (run from scripts/ folder or root)
-cd "$(dirname "$0")/.."
-
-# ── Colors & Logging ──────────────────────────────────────────────────────────
-RED='\033[0;31m'; GRN='\033[0;32m'; YLW='\033[0;33m'
-BLU='\033[0;34m'; CYN='\033[0;36m'; MAG='\033[0;35m'
-BLD='\033[1m';    DIM='\033[2m';     RST='\033[0m'
-
-ts()    { date '+%H:%M:%S'; }
-info()  { echo -e "$(ts) ${BLU}[INFO]${RST}  $*"; }
-ok()    { echo -e "$(ts) ${GRN}[OK]${RST}    $*"; }
-warn()  { echo -e "$(ts) ${YLW}[WARN]${RST}  $*"; }
-error() { echo -e "$(ts) ${RED}[ERROR]${RST} $*" >&2; }
-step()  { echo -e "\n${BLD}${CYN}──── $* ────${RST}"; }
-dim()   { echo -e "${DIM}$*${RST}"; }
-
-banner() {
-    echo -e "${BLD}"
-    echo "╔══════════════════════════════════════════════════╗"
-    echo "║   Transcendence  ·  Dev Environment Orchestrator ║"
-    echo "╚══════════════════════════════════════════════════╝"
-    echo -e "${RST}"
-}
-
-# ── Globals ───────────────────────────────────────────────────────────────────
-LOG_DIR="logs"
-PID_DIR=".pids"
-MAX_LOG_BYTES=$(( 20 * 1024 * 1024 ))
-
-SERVICES=()
-declare -A SVC_PORT
-declare -A SVC_SCHEME
-declare -A SVC_PROFILES
-
-# ── Shutdown state ─────────────────────────────────────────────────────────────
-#
-# SHUTTING_DOWN is the critical flag that breaks the restart loop.
-# Without it: cleanup kills a service → watcher sees dead PID → watcher
-# restarts it → cleanup kills it again → infinite loop.
-#
-# Written to a file so the watcher subshell can see it. An in-memory
-# variable won't work because the watcher is a separate process.
-#
-SHUTDOWN_FLAG="${PID_DIR}/.shutting_down"
-WATCHER_PID=""   # captured after watch_services &, so cleanup can kill it
-
-is_shutting_down() { [[ -f "$SHUTDOWN_FLAG" ]]; }
-
-# ── PID file helpers ──────────────────────────────────────────────────────────
-pid_file()  { echo "$PID_DIR/$1.pid"; }
-write_pid() { echo "$2" > "$(pid_file "$1")"; }
-read_pid()  { local f; f="$(pid_file "$1")"; [[ -f "$f" ]] && cat "$f" || echo ""; }
-clear_pid() { rm -f "$(pid_file "$1")"; }
-
-is_alive() {
-    local pid
-    pid="$(read_pid "$1")"
-    [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null
-}
-
-# ── Log rotation ──────────────────────────────────────────────────────────────
-maybe_rotate_log() {
-    local log_file="$1"
-    if [[ -f "$log_file" ]]; then
-        local size
-        size=$(wc -c < "$log_file" 2>/dev/null || echo 0)
-        if (( size > MAX_LOG_BYTES )); then
-            mv "$log_file" "${log_file}.1"
-            info "Rotated ${log_file} (was $(( size / 1024 / 1024 ))MB)"
-        fi
-    fi
-}
-
-# ── Cleanup ───────────────────────────────────────────────────────────────────
-#
-# FIX: The original script trapped EXIT in addition to SIGINT/SIGTERM.
-# That caused cleanup to fire twice on Ctrl+C (once for SIGINT, once for
-# EXIT when the script exited), and also on any normal exit path.
-#
-# FIX: The shutdown flag is set *before* any kills so the watcher
-# subshell stops its restart loop immediately, instead of racing.
-#
-# FIX: The watcher's PID is explicitly killed here so it doesn't outlive
-# the main script and keep trying to restart dead services.
-#
-_CLEANED_UP=0
-cleanup() {
-    # Guard against double invocation (SIGINT can fire twice: once from the
-    # terminal, once when 'wait' returns with 130 and the script exits).
-    [[ "$_CLEANED_UP" -eq 1 ]] && return
-    _CLEANED_UP=1
-
-    echo ""
-    warn "Shutting down all services..."
-
-    # Signal the watcher to stop before it races to restart dying services
-    touch "$SHUTDOWN_FLAG"
-
-    # Kill the watcher first so it can't restart anything we're about to kill
-    if [[ -n "$WATCHER_PID" ]] && kill -0 "$WATCHER_PID" 2>/dev/null; then
-        kill -TERM "$WATCHER_PID" 2>/dev/null || true
-    fi
-
-    for name in "${SERVICES[@]}"; do
-        stop_service "$name" "quiet"
-    done
-
-    # Fallback for any orphaned Maven/Spring processes from this project.
-    # Using pkill's exit code is unreliable under set -e, so we suppress it.
-    pkill -f "com.ft_transcendence"                         2>/dev/null || true
-    pkill -f "spring-boot:run.*transcendence"               2>/dev/null || true
-    pkill -f "classworlds.launcher.Launcher.*transcendence" 2>/dev/null || true
-
-    rm -rf "$PID_DIR"
-    ok "All services stopped."
-}
-
-# Trap only real termination signals, not EXIT.
-# Trapping EXIT causes cleanup to run on every exit path (including
-# successful ones and the 'exit 0' inside cleanup itself), which
-# produces double-output and can re-kill already-dead processes.
-trap 'cleanup; exit 0' SIGINT SIGTERM
-
-# ── Infra readiness ───────────────────────────────────────────────────────────
-check_infra() {
-    step "Checking Infrastructure"
-
-    local required_containers=("redis-container" "postgres-db")
-    local optional_containers=("rabbitmq")
-    local all_ok=true
-
-    for container in "${required_containers[@]}"; do
-        local status
-        status=$(docker inspect -f '{{.State.Health.Status}}' "$container" 2>/dev/null || echo "missing")
-        case "$status" in
-            healthy)  ok "$container is healthy" ;;
-            missing)
-                error "$container is not running. Start infra first:"
-                error "  docker compose up -d"
-                all_ok=false
-                ;;
-            starting)
-                warn "$container is still starting — waiting..."
-                wait_for_container "$container" 60
-                ;;
-            *)
-                error "$container status: $status"
-                all_ok=false
-                ;;
-        esac
-    done
-
-    for container in "${optional_containers[@]}"; do
-        local status
-        status=$(docker inspect -f '{{.State.Health.Status}}' "$container" 2>/dev/null || echo "missing")
-        if [[ "$status" == "missing" ]]; then
-            warn "$container not running (optional — skipping)"
-        elif [[ "$status" != "healthy" ]]; then
-            warn "$container status: $status (optional — continuing anyway)"
-        else
-            ok "$container is healthy"
-        fi
-    done
-
-    if [[ "$all_ok" == "false" ]]; then
-        error "Required infrastructure is not ready. Aborting."
-        exit 1
-    fi
-}
-
-wait_for_container() {
-    local container="$1"
-    local timeout="${2:-60}"
-    local elapsed=0
-
-    while true; do
-        local status
-        status=$(docker inspect -f '{{.State.Health.Status}}' "$container" 2>/dev/null || echo "missing")
-        [[ "$status" == "healthy" ]] && { ok "$container healthy"; return; }
-        sleep 3
-        elapsed=$(( elapsed + 3 ))
-        printf "\r  ${YLW}waiting${RST} for %s %ds / %ds ..." "$container" "$elapsed" "$timeout"
-        if (( elapsed >= timeout )); then
-            echo ""
-            error "Timeout waiting for $container"
-            exit 1
-        fi
-    done
-}
-
-# ── Maven resolution ──────────────────────────────────────────────────────────
-mvn_cmd() {
-    local dir="$1"
-    if   [[ -x "$dir/mvnw"     ]]; then echo "$PWD/$dir/mvnw"
-    elif [[ -x "./mvnw"        ]]; then echo "$PWD/mvnw"
-    elif command -v mvn &>/dev/null; then echo "mvn"
-    else
-        error "No Maven found. Install Maven or add an mvnw wrapper."
-        exit 1
-    fi
-}
-
-# ── Health check ──────────────────────────────────────────────────────────────
-wait_for_health() {
-    local name="$1"
-    local port="${SVC_PORT[$name]}"
-    local scheme="${SVC_SCHEME[$name]}"
-    local timeout=180
-    local interval=3
-    local elapsed=0
-    local url="${scheme}://localhost:${port}/actuator/health"
-
-    local curl_args=(-sf -o /dev/null "$url")
-    if [[ "$scheme" == "https" ]]; then
-        local client_pem="certs/services/${name}/${name}.pem"
-        local ca_crt="certs/rootCA/rootCA.crt"
-        if [[ -f "$client_pem" && -f "$ca_crt" ]]; then
-            curl_args=(--cert "$client_pem" --cacert "$ca_crt" "${curl_args[@]}")
-        else
-            warn "[$name] cert not found — using -k (insecure) for health check"
-            curl_args=(-k "${curl_args[@]}")
-        fi
-    fi
-
-    info "[$name] waiting for health at $url"
-
-    while ! curl "${curl_args[@]}" 2>/dev/null; do
-        sleep "$interval"
-        elapsed=$(( elapsed + interval ))
-        printf "\r  ${YLW}·${RST} %ds / %ds" "$elapsed" "$timeout"
-
-        if (( elapsed >= timeout )); then
-            echo ""
-            error "[$name] health timeout after ${timeout}s"
-            tail -n 30 "${LOG_DIR}/${name}.log" >&2 || true
-            return 1
-        fi
-
-        if ! is_alive "$name"; then
-            echo ""
-            error "[$name] process died during startup"
-            tail -n 30 "${LOG_DIR}/${name}.log" >&2 || true
-            return 1
-        fi
-    done
-
-    echo ""
-    ok "[$name] healthy ✓"
-}
-
-# ── Start a single service ────────────────────────────────────────────────────
-start_service() {
-    local name="$1"
-    local port="${SVC_PORT[$name]}"
-    local scheme="${SVC_SCHEME[$name]}"
-    local profiles="${SVC_PROFILES[$name]:-dev}"
-
-    step "Starting $name"
-
-    if [[ ! -d "services/$name" ]]; then
-        error "Directory 'services/$name' not found — skipping"
-        return 1
-    fi
-
-    if is_alive "$name"; then
-        warn "[$name] already running — stopping first"
-        stop_service "$name"
-        sleep 2
-    fi
-
-    local log_file="${LOG_DIR}/${name}.log"
-    maybe_rotate_log "$log_file"
-
-    local mvn
-    mvn="$(mvn_cmd "services/$name")"
-
-    dim "  Log → tail -f $log_file"
-
-    # FIX: 'exec' inside the subshell replaces the subshell with Maven,
-    # which means the subshell's PID *becomes* Maven's PID. We save
-    # that PID before exec so we can track and kill Maven directly.
-    # Previously, saving $! captured the subshell PID, but after exec
-    # that PID belongs to Maven — so this was accidentally correct, but
-    # only because exec replaces the process. Made explicit here for clarity.
-    (
-        cd "services/$name"
-        export MAVEN_OPTS="-Dspring-boot.run.fork=false"
-        exec "$mvn" spring-boot:run \
-            -Dspring-boot.run.profiles="$profiles" \
-            --no-transfer-progress \
-            >> "../../$log_file" 2>&1
-    ) &
-
-    local pid=$!
-    write_pid "$name" "$pid"
-    info "[$name] PID $pid"
-
-    if ! wait_for_health "$name"; then
-        error "[$name] failed to start. Aborting."
-        cleanup
-        exit 1
-    fi
-}
-
-# ── Stop a single service ─────────────────────────────────────────────────────
-stop_service() {
-    local name="$1"
-    local mode="${2:-verbose}"
-
-    local pid
-    pid="$(read_pid "$name")"
-
-    # Clear the PID file immediately so the watcher can't race us
-    clear_pid "$name"
-
-    if [[ -z "$pid" ]]; then
-        [[ "$mode" == "verbose" ]] && warn "[$name] no PID on record"
-        return
-    fi
-
-    if kill -0 "$pid" 2>/dev/null; then
-        [[ "$mode" == "verbose" ]] && info "[$name] sending SIGTERM to PID $pid"
-        kill -TERM "$pid" 2>/dev/null || true
-
-        local waited=0
-        while kill -0 "$pid" 2>/dev/null; do
-            sleep 1
-            # FIX: '(( waited++ ))' exits with code 1 when waited=0 under
-            # set -e because the expression evaluates to 0 (falsy).
-            # Use 'waited=$(( waited + 1 ))' instead — always exits 0.
-            waited=$(( waited + 1 ))
-            [[ "$waited" -ge 15 ]] && break
-        done
-
-        if kill -0 "$pid" 2>/dev/null; then
-            warn "[$name] still alive after 15s — sending SIGKILL"
-            kill -KILL "$pid" 2>/dev/null || true
-        fi
-
-        [[ "$mode" == "verbose" ]] && ok "[$name] stopped"
-    fi
-}
-
-# ── Selective restart ─────────────────────────────────────────────────────────
-restart_service() {
-    local name="$1"
-
-    if [[ -z "${SVC_PORT[$name]+x}" ]]; then
-        error "Unknown service: $name"
-        echo "Known services: ${SERVICES[*]}"
-        return 1
-    fi
-
-    warn "Restarting $name..."
-    stop_service "$name" "verbose"
-    sleep 1
-    start_service "$name"
-    ok "$name restarted"
-}
-
-# ── Watcher ───────────────────────────────────────────────────────────────────
-#
-# FIX: The watcher now checks the shutdown flag before acting on a dead PID.
-# Without this check, the watcher races cleanup: as cleanup kills services,
-# the watcher sees dead PIDs and tries to restart them, fighting cleanup.
-#
-watch_services() {
-    info "Watcher started (checks every 5s)"
-    while true; do
-        sleep 5
-
-        # Bail out entirely if shutdown has been requested
-        is_shutting_down && return
-
-        for name in "${SERVICES[@]}"; do
-            # Check shutdown flag inside the loop too — cleanup could have
-            # started mid-iteration
-            is_shutting_down && return
-
-            local pid
-            pid="$(read_pid "$name")"
-            [[ -z "$pid" ]] && continue
-
-            if ! kill -0 "$pid" 2>/dev/null; then
-                echo ""
-                error "[$name] crashed (PID $pid was expected alive)"
-                tail -n 30 "${LOG_DIR}/${name}.log" >&2 || true
-
-                warn "[$name] attempting auto-restart..."
-                if ! start_service "$name"; then
-                    error "[$name] failed to restart — aborting cluster"
-                    cleanup
-                    exit 1
-                fi
-            fi
-        done
-
-        for name in "${SERVICES[@]}"; do
-            maybe_rotate_log "${LOG_DIR}/${name}.log"
-        done
-    done
-}
-
-# ── Status display ────────────────────────────────────────────────────────────
-show_status() {
-    echo ""
-    echo -e "${BLD}Service Status${RST}"
-    echo "────────────────────────────────────────────────"
-    printf "  %-20s %-8s %-10s %s\n" "SERVICE" "PID" "STATUS" "URL"
-    echo "  $(printf '─%.0s' {1..60})"
-
-    for name in "${SERVICES[@]}"; do
-        local pid url status_str
-        pid="$(read_pid "$name")"
-        url="${SVC_SCHEME[$name]}://localhost:${SVC_PORT[$name]}"
-
-        if [[ -z "$pid" ]]; then
-            status_str="${RED}not started${RST}"
-            pid="—"
-        elif kill -0 "$pid" 2>/dev/null; then
-            status_str="${GRN}running${RST}"
-        else
-            status_str="${RED}dead${RST}"
-        fi
-
-        printf "  %-20s %-8s %-20b %s\n" "$name" "$pid" "$status_str" "$url"
-    done
-    echo ""
-}
-
-# ── Log tail shortcut ─────────────────────────────────────────────────────────
-print_log_hints() {
-    echo ""
-    info "Logs (${LOG_DIR}/):"
-    for name in "${SERVICES[@]}"; do
-        dim "  tail -f ${LOG_DIR}/${name}.log"
-    done
-
-    if command -v multitail &>/dev/null; then
-        local args=()
-        for name in "${SERVICES[@]}"; do
-            args+=("-l" "tail -f ${LOG_DIR}/${name}.log")
-        done
-        echo ""
-        dim "  All at once: multitail ${args[*]}"
-    fi
-}
-
-# ── Environment ───────────────────────────────────────────────────────────────
-load_env() {
-    step "Loading Environment"
-
-    if [[ ! -f ".env" ]]; then
-        error ".env not found. Copy .env.example to .env and configure it."
-        exit 1
-    fi
-
-    set -a; source .env; set +a
-    ok "Loaded .env"
-
-    export CONFIG_SERVER_PORT=${CONFIG_SERVER_PORT:-8888}
-    export EUREKA_PORT=${EUREKA_PORT:-8761}
-    export GATEWAY_PORT=${GATEWAY_PORT:-8080}
-    export AUTH_SERVICE_PORT=${AUTH_SERVICE_PORT:-8081}
-
-    export CONFIG_SERVER_SCHEME=${CONFIG_SERVER_SCHEME:-https}
-    export EUREKA_SCHEME=${EUREKA_SCHEME:-https}
-    export GATEWAY_SCHEME=${GATEWAY_SCHEME:-https}
-    export AUTH_SERVICE_SCHEME=${AUTH_SERVICE_SCHEME:-https}
-
-    if [[ ! -d "certs/rootCA" ]]; then
-        warn "certs/rootCA not found — run ./mtls-setup.sh first"
-    fi
-}
-
-# ── Service registry ──────────────────────────────────────────────────────────
-register_services() {
-    register_service "config-server" "$CONFIG_SERVER_PORT" "$CONFIG_SERVER_SCHEME" "native,dev"
-    register_service "eureka-server" "$EUREKA_PORT"        "$EUREKA_SCHEME"        "dev"
-    register_service "gateway"       "$GATEWAY_PORT"       "$GATEWAY_SCHEME"       "dev"
-    register_service "auth-service"  "$AUTH_SERVICE_PORT"  "$AUTH_SERVICE_SCHEME"  "dev"
-}
-
-register_service() {
-    local name="$1" port="$2" scheme="$3" profiles="${4:-dev}"
-    SERVICES+=("$name")
-    SVC_PORT[$name]="$port"
-    SVC_SCHEME[$name]="$scheme"
-    SVC_PROFILES[$name]="$profiles"
-}
-
-# ── Entry point ───────────────────────────────────────────────────────────────
-usage() {
-    echo "Usage: $0 [command] [service]"
-    echo ""
-    echo "Commands:"
-    echo "  (none)              Start all services"
-    echo "  restart <service>   Restart one service without touching others"
-    echo "  stop <service>      Stop one service"
-    echo "  status              Show PID and health of all services"
-    echo "  logs [service]      Tail logs (all or one)"
-    echo ""
-    echo "Services: config-server, eureka-server, gateway, auth-service"
-}
-
-main() {
-    local cmd="${1:-start}"
-    local target="${2:-}"
-
-    banner
-    mkdir -p "$LOG_DIR" "$PID_DIR"
-    load_env
-    register_services
-
-    case "$cmd" in
-        start|"")
-            check_infra
-
-            for name in "${SERVICES[@]}"; do
-                start_service "$name"
-            done
-
-            echo ""
-            echo -e "${BLD}${GRN}╔══════════════════════════════════════════════════╗${RST}"
-            echo -e "${BLD}${GRN}║         All services healthy ✓                   ║${RST}"
-            echo -e "${BLD}${GRN}╚══════════════════════════════════════════════════╝${RST}"
-
-            show_status
-            print_log_hints
-
-            echo ""
-            info "Press Ctrl+C to stop all services."
-            info "In another terminal: $0 restart <service>"
-            echo ""
-
-            # Launch watcher and capture its PID so cleanup can kill it
-            watch_services &
-            WATCHER_PID=$!
-
-            # FIX: 'wait' returns 130 on SIGINT, causing the script to
-            # exit with a non-zero code, which would trigger the EXIT trap
-            # if we had one (and cause a double-cleanup). We suppress the
-            # non-zero exit from wait with '|| true', and let the SIGINT
-            # trap handle the actual cleanup.
-            wait || true
-            ;;
-
-        restart)
-            [[ -z "$target" ]] && { error "Usage: $0 restart <service>"; exit 1; }
-            restart_service "$target"
-            ;;
-
-        stop)
-            [[ -z "$target" ]] && { error "Usage: $0 stop <service>"; exit 1; }
-            stop_service "$target" "verbose"
-            ;;
-
-        status)
-            show_status
-            ;;
-
-        logs)
-            if [[ -n "$target" ]]; then
-                tail -f "${LOG_DIR}/${target}.log"
-            else
-                if command -v multitail &>/dev/null; then
-                    local args=()
-                    for name in "${SERVICES[@]}"; do
-                        args+=("-l" "tail -f ${LOG_DIR}/${name}.log")
-                    done
-                    multitail "${args[@]}"
-                else
-                    tail -f "${LOG_DIR}"/*.log
-                fi
-            fi
-            ;;
-
-        help|-h|--help)
-            usage
-            ;;
-
-        *)
-            error "Unknown command: $cmd"
-            usage
-            exit 1
-            ;;
-    esac
-}
-
-main "$@"
-```
-
-## 📄 File: ./scripts/mtls-setup.sh
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-# Establish root directory execution path (run from scripts/ folder or root)
-cd "$(dirname "$0")/.."
-
-# ─────────────────────────────────────────────────────────────────────────────
-#  Transcendence — mTLS Certificate Manager
-#
-#  Usage:
-#    ./mtls-setup.sh                        # bootstrap + generate all services
-#    ./mtls-setup.sh add <name> [name...]   # add one or more services
-#    ./mtls-setup.sh remove <name> [name…] # remove one or more services
-#    ./mtls-setup.sh renew <name> [name…]  # force-renew specific services
-#    ./mtls-setup.sh renew --all            # force-renew every service
-#    ./mtls-setup.sh status                 # show cert inventory + expiry
-#    ./mtls-setup.sh list                   # list registered services
-#
-#  Layout produced (under CERT_DIR):
-#    certs/
-#    ├── rootCA/
-#    │   ├── rootCA.key          private key  (600)
-#    │   ├── rootCA.crt          certificate  (644)
-#    │   └── rootCA.srl          serial file
-#    ├── truststore/
-#    │   └── truststore.p12      Java truststore (644)
-#    ├── jwt/
-#    │   ├── jwt_private_pkcs8.pem   Gateway only (600)
-#    │   └── jwt_public.pem          Distribute everywhere (644)
-#    └── services/
-#        └── <service-name>/
-#            ├── <name>.key      raw private key (600)
-#            ├── <name>.crt      signed certificate (644)
-#            ├── <name>.pem      fullchain PEM (cert + key) (600)
-#            ├── <name>.p12      PKCS12 keystore (644)
-#            ├── <name>-chain.pem  cert + CA chain (no key) (644)
-#            └── README.txt      usage guide per service
-# ─────────────────────────────────────────────────────────────────────────────
-
-# ── Configuration ─────────────────────────────────────────────────────────────
-CERT_DIR="${CERT_DIR:-certs}"
-CERT_PASS="${CERT_PASSWORD:-password}"
-DAYS_VALID="${DAYS_VALID:-365}"
-DAYS_CA="${DAYS_CA:-3650}"
-CA_CN="${CA_CN:-TranscendenceCA}"
-
-# Default services generated on first run (edit freely)
-DEFAULT_SERVICES=(
-    "gateway"
-    "auth-service"
-    "config-server"
-    "eureka-server"
-)
-
-# ── Colour helpers ─────────────────────────────────────────────────────────────
-RED='\033[0;31m'; GRN='\033[0;32m'; YLW='\033[0;33m'
-BLU='\033[0;34m'; CYN='\033[0;36m'; GRY='\033[0;90m'
-BLD='\033[1m'; RST='\033[0m'
-
-info()    { echo -e "${BLU}[INFO]${RST}  $*"; }
-ok()      { echo -e "${GRN}[OK]${RST}    $*"; }
-warn()    { echo -e "${YLW}[WARN]${RST}  $*"; }
-error()   { echo -e "${RED}[ERROR]${RST} $*" >&2; }
-step()    { echo -e "\n${BLD}${CYN}──── $* ────${RST}"; }
-dim()     { echo -e "${GRY}$*${RST}"; }
-
-banner() {
-    echo -e "${BLD}"
-    echo "╔══════════════════════════════════════════════════╗"
-    echo "║   Transcendence  ·  mTLS Certificate Manager    ║"
-    echo "╚══════════════════════════════════════════════════╝"
-    echo -e "${RST}"
-}
-
-# ── Directory helpers ──────────────────────────────────────────────────────────
-ca_dir()         { echo "$CERT_DIR/rootCA"; }
-trust_dir()      { echo "$CERT_DIR/truststore"; }
-jwt_dir()        { echo "$CERT_DIR/jwt"; }
-svc_dir()        { echo "$CERT_DIR/services/$1"; }
-services_root()  { echo "$CERT_DIR/services"; }
-
-ensure_dirs() {
-    mkdir -p "$(ca_dir)" "$(trust_dir)" "$(jwt_dir)" "$(services_root)"
-}
-
-# ── CA ─────────────────────────────────────────────────────────────────────────
-generate_ca() {
-    local ca_key="$(ca_dir)/rootCA.key"
-    local ca_crt="$(ca_dir)/rootCA.crt"
-
-    if [[ -f "$ca_key" && -f "$ca_crt" ]]; then
-        ok "Root CA already exists — skipping"
-        return
-    fi
-
-    step "Creating Root CA"
-    openssl req -x509 -nodes -newkey rsa:4096 \
-        -keyout "$ca_key" \
-        -out    "$ca_crt" \
-        -days   "$DAYS_CA" \
-        -subj   "/CN=${CA_CN}/O=Transcendence/OU=Infrastructure"
-
-    chmod 600 "$ca_key"
-    chmod 644 "$ca_crt"
-    ok "Root CA created → $(ca_dir)/"
-}
-
-# ── Truststore ─────────────────────────────────────────────────────────────────
-generate_truststore() {
-    local ts="$(trust_dir)/truststore.p12"
-    local ca_crt="$(ca_dir)/rootCA.crt"
-
-    # Rebuild whenever the CA cert is newer than the truststore
-    if [[ -f "$ts" && "$ca_crt" -ot "$ts" ]]; then
-        ok "Truststore is current — skipping"
-        return
-    fi
-
-    step "Rebuilding Java Truststore"
-    rm -f "$ts"
-    keytool -import -trustcacerts \
-        -alias   rootca \
-        -file    "$ca_crt" \
-        -keystore "$ts" \
-        -storetype PKCS12 \
-        -storepass "$CERT_PASS" \
-        -noprompt
-
-    chmod 644 "$ts"
-    ok "Truststore → $(trust_dir)/truststore.p12"
-}
-
-# ── JWT keys ───────────────────────────────────────────────────────────────────
-generate_jwt_keys() {
-    local priv="$(jwt_dir)/jwt_private_pkcs8.pem"
-    local pub="$(jwt_dir)/jwt_public.pem"
-
-    if [[ -f "$priv" && -f "$pub" ]]; then
-        ok "JWT key pair already exists — skipping"
-        return
-    fi
-
-    step "Generating RSA Key Pair for JWT"
-    local tmp
-    tmp="$(mktemp)"
-    openssl genrsa -out "$tmp" 2048
-
-    # PKCS#8 private (Spring Security / KeyFactory compatible)
-    openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt \
-        -in "$tmp" -out "$priv"
-
-    # X.509 public key
-    openssl rsa -in "$tmp" -pubout -out "$pub"
-
-    rm -f "$tmp"
-    chmod 600 "$priv"
-    chmod 644 "$pub"
-    ok "JWT keys → $(jwt_dir)/"
-}
-
-# ── Per-service certificate generation ────────────────────────────────────────
-#
-#  Outputs for <name>  (all inside services/<name>/):
-#    <name>.key           RSA private key              (600 — keep private)
-#    <name>.crt           Signed certificate           (644)
-#    <name>.pem           Full-chain PEM  key+cert     (600 — nginx/HAProxy)
-#    <name>-chain.pem     cert+CA bundle  (no key)     (644 — client trust)
-#    <name>.p12           PKCS12 keystore              (644 — Spring Boot)
-#    README.txt           Spring props + usage hints
-#
-generate_service_cert() {
-    local name="$1"
-    local force="${2:-no}"          # pass "force" to renew
-    local dir
-    dir="$(svc_dir "$name")"
-    local p12="$dir/$name.p12"
-
-    if [[ "$force" != "force" && -f "$p12" ]]; then
-        # Check if it's actually expired
-        local expiry
-        expiry=$(openssl pkcs12 -in "$p12" -passin pass:"$CERT_PASS" -nokeys 2>/dev/null \
-                  | openssl x509 -noout -enddate 2>/dev/null \
-                  | cut -d= -f2 || echo "unknown")
-        if [[ "$expiry" != "unknown" ]]; then
-            local exp_epoch
-            exp_epoch=$(date -d "$expiry" +%s 2>/dev/null || date -j -f "%b %d %T %Y %Z" "$expiry" +%s 2>/dev/null || echo 0)
-            local now_epoch
-            now_epoch=$(date +%s)
-            if (( exp_epoch > now_epoch )); then
-                ok "[$name] certificate valid until $(date -d @$exp_epoch '+%Y-%m-%d' 2>/dev/null || echo $expiry) — skipping"
-                return
-            else
-                warn "[$name] certificate is EXPIRED — regenerating"
-            fi
-        else
-            ok "[$name] certificate exists — skipping (run 'renew $name' to force)"
-            return
-        fi
-    fi
-
-    info "[$name] Generating certificate package..."
-    mkdir -p "$dir"
-
-    local ca_key="$(ca_dir)/rootCA.key"
-    local ca_crt="$(ca_dir)/rootCA.crt"
-    local key="$dir/$name.key"
-    local csr="$dir/$name.csr"
-    local crt="$dir/$name.crt"
-    local pem="$dir/$name.pem"
-    local chain="$dir/$name-chain.pem"
-    local p12="$dir/$name.p12"
-    local ext_file="$dir/$name.ext"
-
-    # SAN extension — always includes localhost variants + the service name
-    cat > "$ext_file" <<EOF
-[req]
-distinguished_name = req_distinguished_name
-req_extensions     = v3_req
-prompt             = no
-
-[req_distinguished_name]
-CN = $name
-
-[v3_req]
-keyUsage         = keyEncipherment, dataEncipherment, digitalSignature
-extendedKeyUsage = serverAuth, clientAuth
-subjectAltName   = @alt_names
-
-[alt_names]
-DNS.1 = $name
-DNS.2 = localhost
-DNS.3 = 127.0.0.1
-IP.1  = 127.0.0.1
-EOF
-
-    # 1. Private key
-    openssl genrsa -out "$key" 2048 2>/dev/null
-
-    # 2. CSR
-    openssl req -new \
-        -key  "$key" \
-        -out  "$csr" \
-        -subj "/CN=$name/O=Transcendence/OU=Service" \
-        -config "$ext_file"
-
-    # 3. Sign with CA
-    openssl x509 -req \
-        -in      "$csr" \
-        -CA      "$ca_crt" \
-        -CAkey   "$ca_key" \
-        -CAcreateserial \
-        -out     "$crt" \
-        -days    "$DAYS_VALID" \
-        -extensions v3_req \
-        -extfile "$ext_file"
-
-    # 4. Full-chain PEM (key + cert) — for nginx, HAProxy, raw TLS
-    cat "$key" "$crt" > "$pem"
-
-    # 5. Chain PEM (cert + CA, no key) — share with clients for trust
-    cat "$crt" "$ca_crt" > "$chain"
-
-    # 6. PKCS12 keystore — for Spring Boot server.ssl.*
-    openssl pkcs12 -export \
-        -in      "$crt" \
-        -inkey   "$key" \
-        -CAfile  "$ca_crt" \
-        -caname  rootca \
-        -out     "$p12" \
-        -name    "$name" \
-        -password pass:"$CERT_PASS"
-
-    # 7. Permissions
-    chmod 600 "$key" "$pem"
-    chmod 644 "$crt" "$chain" "$p12"
-
-    # 8. Cleanup temporaries
-    rm -f "$csr" "$ext_file"
-
-    # 9. README for this service
-    write_service_readme "$name" "$dir"
-
-    ok "[$name] → $dir/"
-    dim "         .key  private key   (600 — do not distribute)"
-    dim "         .crt  certificate   (644)"
-    dim "         .pem  key+cert      (600 — nginx/HAProxy)"
-    dim "         -chain.pem cert+CA  (644 — client trust)"
-    dim "         .p12  PKCS12        (644 — Spring Boot)"
-}
-
-# ── Per-service README ─────────────────────────────────────────────────────────
-write_service_readme() {
-    local name="$1"
-    local dir="$2"
-    cat > "$dir/README.txt" <<EOF
-Certificate Package: $name
-Generated: $(date -u '+%Y-%m-%d %H:%M UTC')
-Valid for: $DAYS_VALID days
-CA: $CA_CN
-
-FILES
-─────
-$name.key          RSA private key      — DO NOT DISTRIBUTE (chmod 600)
-$name.crt          Signed certificate   — safe to distribute
-$name.pem          key + cert bundle    — nginx, HAProxy, raw TLS (chmod 600)
-$name-chain.pem    cert + CA bundle     — give to clients for mutual TLS trust
-$name.p12          PKCS12 keystore      — Spring Boot server.ssl.*
-
-SPRING BOOT APPLICATION.YML (server-side TLS)
-──────────────────────────────────────────────
-server:
-  ssl:
-    enabled: true
-    key-store:             classpath:$name.p12
-    key-store-password:    \${CERT_PASSWORD:$CERT_PASS}
-    key-store-type:        PKCS12
-    key-alias:             $name
-    trust-store:           classpath:truststore.p12
-    trust-store-password:  \${CERT_PASSWORD:$CERT_PASS}
-    trust-store-type:      PKCS12
-    client-auth:           need              # mTLS: require client certs
-
-SPRING CLOUD GATEWAY (reactive, for mTLS outbound to services)
-───────────────────────────────────────────────────────────────
-spring:
-  cloud:
-    gateway:
-      httpclient:
-        ssl:
-          use-insecure-trust-manager: false
-          trusted-x509-certificates:
-            - classpath:rootCA.crt
-
-FEIGN / REST TEMPLATE CLIENT mTLS
-───────────────────────────────────
-# Add the .p12 as key-store AND the truststore.p12 as trust-store
-# on any outbound HTTP client that calls a service behind mTLS.
-
-EUREKA CLIENT
-─────────────
-eureka:
-  client:
-    service-url:
-      defaultZone: https://eureka-server:8761/eureka/
-  instance:
-    secure-port-enabled: true
-    non-secure-port-enabled: false
-EOF
-}
-
-# ── Status / inventory ─────────────────────────────────────────────────────────
-cmd_status() {
-    banner
-    echo -e "${BLD}Certificate Inventory${RST}"
-    echo "────────────────────────────────────────────────────"
-
-    # Root CA
-    local ca_crt="$(ca_dir)/rootCA.crt"
-    if [[ -f "$ca_crt" ]]; then
-        local exp
-        exp=$(openssl x509 -noout -enddate -in "$ca_crt" 2>/dev/null | cut -d= -f2)
-        echo -e "  ${BLD}Root CA${RST}          expires ${exp}"
-    else
-        warn "  Root CA not found"
-    fi
-
-    # Truststore
-    local ts="$(trust_dir)/truststore.p12"
-    [[ -f "$ts" ]] && echo -e "  ${BLD}Truststore${RST}       ✓ present" || warn "  Truststore missing"
-
-    # JWT
-    local jwt_priv="$(jwt_dir)/jwt_private_pkcs8.pem"
-    local jwt_pub="$(jwt_dir)/jwt_public.pem"
-    [[ -f "$jwt_priv" && -f "$jwt_pub" ]] \
-        && echo -e "  ${BLD}JWT keys${RST}         ✓ present" \
-        || warn "  JWT keys missing"
-
-    echo ""
-    echo -e "${BLD}Services${RST}"
-    echo "────────────────────────────────────────────────────"
-
-    local svc_root
-    svc_root="$(services_root)"
-    if [[ ! -d "$svc_root" ]] || [[ -z "$(ls -A "$svc_root" 2>/dev/null)" ]]; then
-        warn "  No service certificates found"
-        return
-    fi
-
-    local now_epoch
-    now_epoch=$(date +%s)
-    local warn_threshold=$(( now_epoch + 30*86400 ))   # warn if expiring in <30 days
-
-    printf "  %-22s %-12s %-28s %s\n" "SERVICE" "STATUS" "EXPIRES" "FORMATS"
-    echo "  $(printf '─%.0s' {1..70})"
-    for svc_path in "$svc_root"/*/; do
-        [[ -d "$svc_path" ]] || continue
-        local svc
-        svc=$(basename "$svc_path")
-        local p12="$svc_path/$svc.p12"
-
-        if [[ ! -f "$p12" ]]; then
-            printf "  %-22s ${RED}%-12s${RST}\n" "$svc" "MISSING"
-            continue
-        fi
-
-        local exp_str
-        exp_str=$(openssl pkcs12 -in "$p12" -passin pass:"$CERT_PASS" -nokeys 2>/dev/null \
-                  | openssl x509 -noout -enddate 2>/dev/null \
-                  | cut -d= -f2 || echo "unknown")
-
-        local status="${GRN}OK${RST}"
-        if [[ "$exp_str" != "unknown" ]]; then
-            local exp_epoch
-            exp_epoch=$(date -d "$exp_str" +%s 2>/dev/null \
-                     || date -j -f "%b %d %T %Y %Z" "$exp_str" +%s 2>/dev/null \
-                     || echo 0)
-            local human_exp
-            human_exp=$(date -d @"$exp_epoch" '+%Y-%m-%d' 2>/dev/null || echo "$exp_str")
-            if (( exp_epoch < now_epoch )); then
-                status="${RED}EXPIRED${RST}"
-            elif (( exp_epoch < warn_threshold )); then
-                status="${YLW}EXPIRING${RST}"
-            fi
-
-            # Which formats present
-            local formats=""
-            [[ -f "$svc_path/$svc.key"       ]] && formats+="key "
-            [[ -f "$svc_path/$svc.crt"       ]] && formats+="crt "
-            [[ -f "$svc_path/$svc.pem"       ]] && formats+="pem "
-            [[ -f "$svc_path/$svc-chain.pem" ]] && formats+="chain "
-            [[ -f "$svc_path/$svc.p12"       ]] && formats+="p12"
-
-            printf "  %-22s %-20b %-28s %s\n" "$svc" "$status" "$human_exp" "$formats"
-        else
-            printf "  %-22s %-20b %-28s\n" "$svc" "${YLW}UNKNOWN${RST}" "—"
-        fi
-    done
-    echo ""
-}
-
-# ── List services ──────────────────────────────────────────────────────────────
-cmd_list() {
-    local svc_root
-    svc_root="$(services_root)"
-    if [[ ! -d "$svc_root" ]] || [[ -z "$(ls -A "$svc_root" 2>/dev/null)" ]]; then
-        info "No services registered yet"
-        return
-    fi
-    echo "Registered services:"
-    for svc_path in "$svc_root"/*/; do
-        [[ -d "$svc_path" ]] && echo "  • $(basename "$svc_path")"
-    done
-}
-
-# ── Remove service ─────────────────────────────────────────────────────────────
-cmd_remove() {
-    if [[ $# -eq 0 ]]; then
-        error "Usage: $0 remove <service> [service...]"
-        exit 1
-    fi
-    for name in "$@"; do
-        local dir
-        dir="$(svc_dir "$name")"
-        if [[ -d "$dir" ]]; then
-            rm -rf "$dir"
-            ok "Removed $name"
-        else
-            warn "$name — not found (nothing to remove)"
-        fi
-    done
-}
-
-# ── Renew service(s) ───────────────────────────────────────────────────────────
-cmd_renew() {
-    if [[ $# -eq 0 ]]; then
-        error "Usage: $0 renew <service|--all> [service...]"
-        exit 1
-    fi
-
-    if [[ "$1" == "--all" ]]; then
-        local svc_root
-        svc_root="$(services_root)"
-        if [[ ! -d "$svc_root" ]]; then
-            warn "No services directory found"
-            return
-        fi
-        for svc_path in "$svc_root"/*/; do
-            [[ -d "$svc_path" ]] || continue
-            generate_service_cert "$(basename "$svc_path")" "force"
-        done
-    else
-        for name in "$@"; do
-            generate_service_cert "$name" "force"
-        done
-    fi
-}
-
-# ── Add service(s) ────────────────────────────────────────────────────────────
-cmd_add() {
-    if [[ $# -eq 0 ]]; then
-        error "Usage: $0 add <service> [service...]"
-        exit 1
-    fi
-    # Ensure CA exists before generating service certs
-    ensure_dirs
-    generate_ca
-    generate_truststore
-
-    for name in "$@"; do
-        generate_service_cert "$name"
-    done
-}
-
-# ── Bootstrap (default: run everything for DEFAULT_SERVICES) ──────────────────
-cmd_bootstrap() {
-    banner
-    ensure_dirs
-    generate_ca
-    generate_truststore
-    generate_jwt_keys
-
-    step "Service Certificates"
-    for svc in "${DEFAULT_SERVICES[@]}"; do
-        generate_service_cert "$svc"
-    done
-
-    echo ""
-    echo -e "${BLD}${GRN}╔══════════════════════════════════════════════════╗${RST}"
-    echo -e "${BLD}${GRN}║            All certificates ready ✓              ║${RST}"
-    echo -e "${BLD}${GRN}╚══════════════════════════════════════════════════╝${RST}"
-    echo ""
-    echo -e "  ${BLD}Keystore password:${RST}  ${CERT_PASS}"
-    echo -e "  ${BLD}Certificate root:${RST}   ${CERT_DIR}/"
-    echo ""
-    echo "  Files to copy into each service's src/main/resources/:"
-    echo "    • services/<name>/<name>.p12     (its own keystore)"
-    echo "    • truststore/truststore.p12      (shared CA trust)"
-    echo "    • rootCA/rootCA.crt              (raw CA cert)"
-    echo ""
-    echo "  JWT keys:"
-    echo "    • jwt/jwt_private_pkcs8.pem      → gateway only"
-    echo "    • jwt/jwt_public.pem             → every resource server"
-    echo ""
-    echo "  Run './mtls-setup.sh status' to verify the full inventory."
-    echo ""
-}
-
-# ── Entry point ───────────────────────────────────────────────────────────────
-CMD="${1:-bootstrap}"
-
-case "$CMD" in
-    bootstrap|"")    cmd_bootstrap ;;
-    add)             shift; cmd_add "$@" ;;
-    remove|rm)       shift; cmd_remove "$@" ;;
-    renew)           shift; cmd_renew "$@" ;;
-    status)          cmd_status ;;
-    list|ls)         cmd_list ;;
-    help|-h|--help)
-        echo "Usage: $0 [command] [args]"
-        echo ""
-        echo "Commands:"
-        echo "  (none)             Bootstrap: CA + truststore + JWT + default services"
-        echo "  add <name...>      Add one or more service cert packages"
-        echo "  remove <name...>   Remove service cert directories"
-        echo "  renew <name...>    Force-renew specific service certs"
-        echo "  renew --all        Force-renew all service certs"
-        echo "  status             Show cert inventory with expiry dates"
-        echo "  list               List registered services"
-        echo ""
-        echo "Environment:"
-        echo "  CERT_DIR       Output directory        (default: certs)"
-        echo "  CERT_PASSWORD  Keystore password        (default: changeit)"
-        echo "  DAYS_VALID     Service cert lifetime    (default: 365)"
-        echo "  DAYS_CA        Root CA lifetime         (default: 3650)"
-        echo "  CA_CN          CA common name           (default: TranscendenceCA)"
-        ;;
-    *)
-        error "Unknown command: $CMD"
-        echo "Run '$0 help' for usage."
-        exit 1
-        ;;
-esac
-```
-
-## 📄 File: ./scripts/generate-ai-context.sh
-```bash
-#!/usr/bin/env bash
-
-# Establish root directory execution path (run from scripts/ folder or root)
-cd "$(dirname "$0")/.."
-
-# ==============================================================================
-# 🚀 AI CONTEXT GENERATOR - TOKEN OPTIMIZER
-# ==============================================================================
-# This script scans your microservices and frontend workspace, filters out
-# generated code, external libraries, secrets, and binary assets, and combines
-# your actual hand-written source code into a single, clean Markdown file.
-#
-# Usage:
-#   chmod +x generate-ai-context.sh
-#   ./generate-ai-context.sh
-# ==============================================================================
-
-OUTPUT_FILE="project_codebase_context.md"
-
-# Clear previous output
-echo "" > "$OUTPUT_FILE"
-
-echo "===================================================="
-echo "🔍 Scanning workspace for source files..."
-echo "===================================================="
-
-# Temporary file to store file list
-TEMP_LIST=$(mktemp)
-
-# Find relevant files, ignoring bulky dependencies, binary builds, and secrets
-find . -type f \
-  ! -path "*/node_modules/*" \
-  ! -path "*/target/*" \
-  ! -path "*/.git/*" \
-  ! -path "*/.idea/*" \
-  ! -path "*/.vscode/*" \
-  ! -path "*/certs/*" \
-  ! -path "*/dist/*" \
-  ! -path "*/build/*" \
-  ! -name "*.p12" \
-  ! -name "*.pem" \
-  ! -name "*.key" \
-  ! -name "*.crt" \
-  ! -name "*.jks" \
-  ! -name "*.png" \
-  ! -name "*.jpg" \
-  ! -name "*.jpeg" \
-  ! -name "*.gif" \
-  ! -name "*.ico" \
-  ! -name "*.woff*" \
-  ! -name "*.ttf" \
-  ! -name "package-lock.json" \
-  ! -name "yarn.lock" \
-  ! -name "pnpm-lock.yaml" \
-  ! -name "$OUTPUT_FILE" \
-  \( \
-     -name "*.java" \
-     -o -name "*.jsx" \
-     -o -name "*.js" \
-     -o -name "*.ts" \
-     -o -name "*.tsx" \
-     -o -name "*.css" \
-     -o -name "*.html" \
-     -o -name "*.xml" \
-     -o -name "*.yaml" \
-     -o -name "*.yml" \
-     -o -name "*.properties" \
-     -o -name "*.sh" \
-     -o -name "*.env*" \
-     -o -name "Dockerfile" \
-     -o -name "docker-compose*" \
-  \) > "$TEMP_LIST"
-
-TOTAL_FILES=$(wc -l < "$TEMP_LIST" | xargs)
-echo "Found $TOTAL_FILES relevant source code files!"
-echo "Bundling files into $OUTPUT_FILE..."
-
-# Write Markdown Header
-cat << 'EOF' >> "$OUTPUT_FILE"
-# 📦 TRANSCENDENCE MICROSERVICES CONTEXT
-
-This single document contains the handwritten source code of the Transcendence Microservices Stack. It is optimized to be highly token-efficient for AI context ingestion.
-
-## 🗂️ Project Structure Summary
-EOF
-
-# Append directory layout
-echo "Generating directory summary..."
-echo '```' >> "$OUTPUT_FILE"
-find . -maxdepth 3 \
-  ! -path "*/node_modules*" \
-  ! -path "*/target*" \
-  ! -path "*/.git*" \
-  ! -path "*/.idea*" \
-  ! -path "*/.vscode*" \
-  ! -path "*/certs*" \
-  ! -path "*/dist*" \
-  ! -path "*/build*" \
-  -not -name "." | sort | sed -e 's;[^/]*/;|____;g;s;____|; |;g' >> "$OUTPUT_FILE"
-echo '```' >> "$OUTPUT_FILE"
-echo "" >> "$OUTPUT_FILE"
-
-# Process each file
-CURRENT_COUNT=0
-while IFS= read -r file; do
-  ((CURRENT_COUNT++))
-  
-  # Determine markdown syntax highlighting language
-  ext="${file##*.}"
-  lang="text"
-  case "$ext" in
-    java) lang="java" ;;
-    jsx|js) lang="javascript" ;;
-    tsx|ts) lang="typescript" ;;
-    xml) lang="xml" ;;
-    yaml|yml) lang="yaml" ;;
-    css) lang="css" ;;
-    html) lang="html" ;;
-    sh) lang="bash" ;;
-    properties) lang="properties" ;;
-  esac
-  
-  if [[ "$file" == *"Dockerfile"* ]]; then
-    lang="dockerfile"
-  elif [[ "$file" == *".env"* ]]; then
-    lang="properties"
-  fi
-
-  # Append file context
-  echo "📄 Adding [$CURRENT_COUNT/$TOTAL_FILES]: $file"
-  
-  echo "## 📄 File: $file" >> "$OUTPUT_FILE"
-  echo '```'"$lang" >> "$OUTPUT_FILE"
-  cat "$file" >> "$OUTPUT_FILE"
-  echo "" >> "$OUTPUT_FILE"
-  echo '```' >> "$OUTPUT_FILE"
-  echo "" >> "$OUTPUT_FILE"
-
-done < "$TEMP_LIST"
-
-rm "$TEMP_LIST"
-
-echo "===================================================="
-echo "🎉 SUCCESS! Single context file generated:"
-echo "📂 $OUTPUT_FILE"
-echo "===================================================="
+## 📄 File: ./.env
+```properties
+# .env — never commit this
+COMPOSE_PROJECT_NAME=transcendence
+DB_PASSWORD=password
+DB_USER=transcendence
+DB_NAME=transcendence_db
+
+REDIS_PASSWORD=password
+
+RABBITMQ_USER=admin
+RABBITMQ_PASSWORD=password
+
+CERT_PASSWORD=password
+CERT_DIR_PATH=/home/laxuard/1337/Microservices/certs
+
+EUREKA_USERNAME=admin
+EUREKA_PASSWORD=password
+
+CONFIG_USERNAME=admin
+CONFIG_PASSWORD=password
+CONFIG_REPO_PATH=/home/laxuard/1337/Microservices/config/config-repo
+
+REDIS_PORT=6380
+EUREKA_PORT=8761
+GATEWAY_PORT=8080
+POSTGRES_PORT=5432
+RABBITMQ_PORT=5672
+AUTH_SERVICE_PORT=8081
+CONFIG_SERVER_PORT=8888
+RABBITMQ_MANAGEMENT_PORT=15672
+
+GOOGLE_CLIENT_ID=dummy_google_id
+GOOGLE_CLIENT_SECRET=dummy_google_secret
 
 ```
 

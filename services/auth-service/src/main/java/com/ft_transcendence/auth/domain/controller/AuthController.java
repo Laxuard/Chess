@@ -16,6 +16,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import com.ft_transcendence.auth.domain.dto.request.LoginRequest;
 import com.ft_transcendence.auth.domain.dto.response.AuthResponse;
 import com.ft_transcendence.auth.domain.dto.request.RegisterRequest;
+import com.ft_transcendence.auth.domain.dto.request.SetPasswordRequest;
 import com.ft_transcendence.auth.domain.dto.response.UserProfileResponse;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
@@ -67,6 +68,18 @@ public class AuthController {
         UserAuth userDetails = authService.getUserDetails(userId);
         
         return ResponseEntity.ok(userMapper.toProfileResponse(userDetails));
+    }
+
+    @PostMapping("/password/set")
+    @PreAuthorize("hasAuthority('SCOPE_USER') or hasRole('USER')")
+    public ResponseEntity<Void> setPassword(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody SetPasswordRequest request) {
+        
+        UUID userId = UUID.fromString(jwt.getSubject());
+        authService.setPassword(userId, request.password(), request.currentPassword());
+        
+        return ResponseEntity.ok().build();
     }
 
     // ── WEB SESSION HANDSHAKE SYNC ──────────────────────────────────────────

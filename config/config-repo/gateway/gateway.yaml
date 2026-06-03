@@ -51,6 +51,24 @@ spring:
               lower-case-service-id: true
 
           routes:
+            # Config Server Proxy (Internal only)
+            - id: config-server-proxy
+              uri: https://config-server:8888
+              order: 0
+              predicates:
+                - Path=/config-server/**
+              filters:
+                - StripPrefix=1
+
+            # Eureka Server Proxy (Internal only)
+            - id: eureka-server-proxy
+              uri: https://eureka-server:8761
+              order: 0
+              predicates:
+                - Path=/eureka-server/**
+              filters:
+                - StripPrefix=1
+
             # OpenAPI Spec Bypass (High Priority)
             - id: auth-service-openapi-bypass
               uri: lb://auth-service

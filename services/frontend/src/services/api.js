@@ -150,6 +150,21 @@ export async function unlinkOAuth2Provider(provider) {
 }
 
 /**
+ * POST /api/auth/password/set
+ * Body: { password }
+ */
+export async function setLocalPassword(password, currentPassword) {
+  const response = await apiFetch('/api/auth/password/set', {
+    method: 'POST',
+    body: JSON.stringify({ password, currentPassword }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  return { status: response.status, data };
+}
+
+
+/**
  * POST /api/auth/logout
  * Triggers full stateful session invalidation on the BFF Gateway.
  */

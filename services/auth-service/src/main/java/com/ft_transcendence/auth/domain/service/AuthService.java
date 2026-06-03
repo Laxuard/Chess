@@ -17,6 +17,7 @@ import com.ft_transcendence.auth.domain.repository.UserAuthRepository;
 import org.springframework.security.authentication.AuthenticationManager;
 import com.ft_transcendence.auth.core.exception.ResourceNotFoundException;
 import com.ft_transcendence.auth.core.exception.DuplicateResourceException;
+import com.ft_transcendence.auth.core.exception.BadRequestException;
 import com.ft_transcendence.auth.domain.model.twofactor.TwoFactorMethodType;
 import com.ft_transcendence.auth.domain.model.twofactor.UserTwoFactorMethod;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -89,6 +90,41 @@ public class AuthService {
     public UserAuth getUserDetails(UUID userId) {
         return userAuthRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with ID: " + userId));
+    }
+
+    /**
+     * Sets a local password for an account (typically registered via OAuth2)
+     * and maps a LOCAL identity to it.
+     */
+    @Transactional
+    public void setPassword(UUID userId, String newPassword, String currentPassword) {
+        UserAuth user = getUserDetails(userId);
+        
+        // If a password is already configured, verify current password before updating
+        boolean hasPassword = user.getPassword() != null && !user.getPassword().isBlank();
+        if (hasPassword) {
+            if (currentPassword == null || currentPassword.isBlank() || 
+                    !passwordEncoder.matches(currentPassword, user.getPassword())) {
+                throw new BadRequestException("Verification failed. Current password is invalid.");
+            }
+        }
+        
+        user.setPassword(passwordEncoder.encode(newPassword));
+        
+        boolean hasLocalIdentity = user.getIdentities().stream()
+                .anyMatch(id -> id.getProvider() == AuthProvider.LOCAL);
+        
+        if (!hasLocalIdentity) {
+            UserIdentity localIdentity = UserIdentity.builder()
+                    .user(user)
+                    .provider(AuthProvider.LOCAL)
+                    .providerId(user.getEmail())
+                    .lastLoginAt(LocalDateTime.now())
+                    .build();
+            user.addIdentity(localIdentity);
+        }
+        
+        userAuthRepository.save(user);
     }
 
     // ── PRIVATE GUARD BLOCKS ────────────────────────────────────────────────

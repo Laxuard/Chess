@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transcendence DevPortal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0d0f14;
+            --card-bg: rgba(22, 28, 45, 0.4);
+            --card-border: rgba(255, 255, 255, 0.08);
+            --text-color: #e2e8f0;
+            --text-muted: #94a3b8;
+            --primary: #6366f1;
+            --primary-glow: rgba(99, 102, 241, 0.3);
+            --success: #10b981;
+            --success-glow: rgba(16, 185, 129, 0.25);
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --mono-font: 'JetBrains Mono', monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.12) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.08) 0px, transparent 50%);
+            color: var(--text-color);
+            font-family: 'Outfit', sans-serif;
+            min-height: 100vh;
+            padding: 2.5rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        header {
+            width: 100%;
+            max-width: 1200px;
+            margin-bottom: 3rem;
+            text-align: center;
+        }
+
+        .logo-container {
+            display: inline-flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .logo-badge {
+            background: linear-gradient(135deg, var(--primary), #a855f7);
+            color: #ffffff;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-weight: 800;
+            font-size: 0.85rem;
+            letter-spacing: 0.05em;
+            box-shadow: 0 0 20px var(--primary-glow);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            background: linear-gradient(to right, #ffffff, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.02em;
+        }
+
+        p.subtitle {
+            color: var(--text-muted);
+            margin-top: 0.5rem;
+            font-size: 1.1rem;
+        }
+
+        main {
+            width: 100%;
+            max-width: 1200px;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 2.5rem;
+        }
+
+        @media (min-width: 900px) {
+            main {
+                grid-template-columns: 3fr 2fr;
+            }
+        }
+
+        .section-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: #ffffff;
+        }
+
+        .section-title::after {
+            content: '';
+            flex-grow: 1;
+            height: 1px;
+            background: linear-gradient(to right, rgba(255, 255, 255, 0.1), transparent);
+        }
+
+        /* Dashboards Card Grid */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2.5rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(12px);
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(99, 102, 241, 0.35);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), 0 0 15px rgba(99, 102, 241, 0.05);
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: var(--primary);
+            opacity: 0;
+        }
+
+        .card:hover::before {
+            opacity: 1;
+        }
+
+        .card.secure-card::before {
+            background: var(--success);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1rem;
+        }
+
+        .icon-wrapper {
+            background: rgba(255, 255, 255, 0.04);
+            border-radius: 12px;
+            padding: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        .badge {
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.2rem 0.5rem;
+            border-radius: 6px;
+            text-transform: uppercase;
+        }
+
+        .badge-https {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--success);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.05);
+        }
+
+        .badge-http {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--warning);
+            border: 1px solid rgba(245, 158, 11, 0.2);
+        }
+
+        .card h3 {
+            font-size: 1.15rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #ffffff;
+        }
+
+        .card p {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            line-height: 1.4;
+            flex-grow: 1;
+            margin-bottom: 1.25rem;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            background: var(--primary);
+            color: #ffffff;
+            font-weight: 600;
+            font-size: 0.9rem;
+            padding: 0.6rem 1rem;
+            border-radius: 10px;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 12px var(--primary-glow);
+        }
+
+        .btn:hover {
+            background: #4f46e5;
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-outline {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            background: transparent;
+            color: var(--text-color);
+            border: 1px solid var(--card-border);
+            font-weight: 600;
+            font-size: 0.9rem;
+            padding: 0.6rem 1rem;
+            border-radius: 10px;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .btn-outline:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--text-muted);
+        }
+
+        /* Console Checkbox List */
+        .checklist-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            backdrop-filter: blur(12px);
+        }
+
+        .health-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .health-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 1rem;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+        }
+
+        .health-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .health-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            box-shadow: 0 0 10px var(--text-muted);
+        }
+
+        .health-indicator.active {
+            background: var(--success);
+            box-shadow: 0 0 10px var(--success-glow);
+            animation: pulse 2s infinite;
+        }
+
+        .health-indicator.down {
+            background: var(--danger);
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+        }
+
+        .health-indicator.warning {
+            background: var(--warning);
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
+            animation: pulse 3s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .health-name {
+            font-size: 0.95rem;
+            font-weight: 600;
+        }
+
+        .health-status-badge {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-muted);
+        }
+
+        .health-endpoint {
+            font-size: 0.8rem;
+            font-family: var(--mono-font);
+            color: var(--text-muted);
+        }
+
+        /* CLI Cheat Sheet Codeblock */
+        .cli-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            backdrop-filter: blur(12px);
+        }
+
+        .code-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .command-block {
+            background: rgba(10, 11, 15, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 1rem;
+            position: relative;
+        }
+
+        .command-desc {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+
+        .command-line {
+            font-family: var(--mono-font);
+            font-size: 0.85rem;
+            color: #38bdf8;
+            word-break: break-all;
+            padding-right: 2rem;
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 0.25rem;
+            border-radius: 4px;
+        }
+
+        .copy-btn:hover {
+            color: #ffffff;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        footer {
+            margin-top: 4rem;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        footer a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo-container">
+            <span class="logo-badge">ZERO TRUST</span>
+            <h1>Transcendence</h1>
+        </div>
+        <p class="subtitle">Microservice Development Control Panel</p>
+    </header>
+
+    <main>
+        <div>
+            <!-- Dashboard Links Section -->
+            <h2 class="section-title">🔌 Active Management Dashboards</h2>
+            <div class="dashboard-grid">
+                
+                <!-- Eureka Card -->
+                <div class="card secure-card">
+                    <div class="card-header">
+                        <div class="icon-wrapper">📡</div>
+                        <span class="badge badge-https">mTLS HTTPS</span>
+                    </div>
+                    <h3>Eureka Discovery Server</h3>
+                    <p>Registry view of all active services and internal health statuses.</p>
+                    <a href="https://localhost:8761/" target="_blank" class="btn">Launch Dashboard</a>
+                </div>
+
+                <!-- API Gateway Card -->
+                <div class="card secure-card">
+                    <div class="card-header">
+                        <div class="icon-wrapper">🛡️</div>
+                        <span class="badge badge-https">mTLS HTTPS</span>
+                    </div>
+                    <h3>Gateway OpenAPI (Swagger)</h3>
+                    <p>Aggregated interactive playground and schemas for all API routes.</p>
+                    <a href="https://localhost:8080/swagger-ui.html" target="_blank" class="btn">Explore APIs</a>
+                </div>
+
+                <!-- Redis Commander Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="icon-wrapper">🗄️</div>
+                        <span class="badge badge-http">HTTP</span>
+                    </div>
+                    <h3>Redis Commander</h3>
+                    <p>Web UI for searching keys, managing sessions, and monitoring cache data.</p>
+                    <a href="http://localhost:6381/" target="_blank" class="btn">Open Commander</a>
+                </div>
+
+                <!-- RabbitMQ Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="icon-wrapper">🐇</div>
+                        <span class="badge badge-http">HTTP</span>
+                    </div>
+                    <h3>RabbitMQ Management</h3>
+                    <p>Observe message brokers, exchanges, queues, and channel activity.</p>
+                    <a href="http://localhost:15672/" target="_blank" class="btn">Open Console</a>
+                </div>
+
+            </div>
+
+            <!-- Health Monitoring Section -->
+            <h2 class="section-title">❤️ Live Health Status Check</h2>
+            <div class="checklist-card">
+                <div class="health-list">
+                    <div class="health-item">
+                        <div class="health-info">
+                            <div class="health-indicator" id="config-health"></div>
+                            <div>
+                                <div style="display:flex; align-items:center; gap: 0.5rem;">
+                                    <span class="health-name">Config Server</span>
+                                    <span class="health-status-badge" id="config-health-text">checking</span>
+                                </div>
+                                <div class="health-endpoint">/config-server/actuator/health</div>
+                            </div>
+                        </div>
+                        <a href="/config-server/actuator/health" id="config-health-link" target="_blank" class="btn btn-outline">Raw JSON</a>
+                    </div>
+                    <div class="health-item">
+                        <div class="health-info">
+                            <div class="health-indicator" id="eureka-health"></div>
+                            <div>
+                                <div style="display:flex; align-items:center; gap: 0.5rem;">
+                                    <span class="health-name">Eureka Server</span>
+                                    <span class="health-status-badge" id="eureka-health-text">checking</span>
+                                </div>
+                                <div class="health-endpoint">/eureka-server/actuator/health</div>
+                            </div>
+                        </div>
+                        <a href="/eureka-server/actuator/health" id="eureka-health-link" target="_blank" class="btn btn-outline">Raw JSON</a>
+                    </div>
+                    <div class="health-item">
+                        <div class="health-info">
+                            <div class="health-indicator" id="gateway-health"></div>
+                            <div>
+                                <div style="display:flex; align-items:center; gap: 0.5rem;">
+                                    <span class="health-name">API Gateway</span>
+                                    <span class="health-status-badge" id="gateway-health-text">checking</span>
+                                </div>
+                                <div class="health-endpoint">/actuator/health</div>
+                            </div>
+                        </div>
+                        <a href="/actuator/health" id="gateway-health-link" target="_blank" class="btn btn-outline">Raw JSON</a>
+                    </div>
+                    <div class="health-item">
+                        <div class="health-info">
+                            <div class="health-indicator" id="auth-health"></div>
+                            <div>
+                                <div style="display:flex; align-items:center; gap: 0.5rem;">
+                                    <span class="health-name">Authentication Service</span>
+                                    <span class="health-status-badge" id="auth-health-text">checking</span>
+                                </div>
+                                <div class="health-endpoint">/auth-service/actuator/health</div>
+                            </div>
+                        </div>
+                        <a href="/auth-service/actuator/health" id="auth-health-link" target="_blank" class="btn btn-outline">Raw JSON</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cluster Topology Section -->
+            <h2 class="section-title" style="margin-top: 2.5rem;">📡 Live Service Registry (Eureka)</h2>
+            <div class="checklist-card">
+                <div id="registered-apps-list" style="display:flex; flex-direction:column; gap:0.75rem;">
+                    <div style="color:var(--text-muted); font-size:0.9rem;">Connecting to registry...</div>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <!-- Command Console Cheat Sheet -->
+            <h2 class="section-title">⌨️ Developer Quick Console</h2>
+            <div class="cli-card">
+                <div class="code-container">
+                    
+                    <div class="command-block">
+                        <div class="command-desc">🚀 Register & Provision New Microservice (Node/Python)</div>
+                        <div class="command-line" id="cmd-register">./scripts/register-service.sh [service-name] [nodejs|python]</div>
+                        <button class="copy-btn" onclick="copyText('cmd-register')">📋</button>
+                    </div>
+
+                    <div class="command-block">
+                        <div class="command-desc">🔄 Hot-Reload API Gateway Routing Context</div>
+                        <div class="command-line" id="cmd-refresh">docker exec gateway curl -k -X POST https://localhost:8080/actuator/refresh && docker exec gateway curl -k -X POST https://localhost:8080/actuator/gateway/refresh</div>
+                        <button class="copy-btn" onclick="copyText('cmd-refresh')">📋</button>
+                    </div>
+
+                    <div class="command-block">
+                        <div class="command-desc">🔑 Import Client Certificate to Linux NSS (Brave/Chrome)</div>
+                        <div class="command-line" id="cmd-cert">pk12util -d sql:$HOME/.pki/nssdb -i certs/services/gateway/gateway.p12 -W password</div>
+                        <button class="copy-btn" onclick="copyText('cmd-cert')">📋</button>
+                    </div>
+
+                    <div class="command-block">
+                        <div class="command-desc">🐳 Run stack orchestration wrapper script</div>
+                        <div class="command-line" id="cmd-docker">./scripts/docker.sh [up|down|infra|apps|restart]</div>
+                        <button class="copy-btn" onclick="copyText('cmd-docker')">📋</button>
+                    </div>
+
+                    <div class="command-block">
+                        <div class="command-desc">📝 Query Registered Apps from Eureka Registry</div>
+                        <div class="command-line" id="cmd-query">curl -k --cert certs/services/gateway/gateway.crt --key certs/services/gateway/gateway.key -H "Accept: application/json" https://localhost:8761/eureka/apps</div>
+                        <button class="copy-btn" onclick="copyText('cmd-query')">📋</button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <p>Transcendence Cluster Developer Environment · Built securely with mTLS and Spring Cloud</p>
+    </footer>
+
+    <script>
+        function copyText(id) {
+            const text = document.getElementById(id).innerText;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Copied to clipboard!');
+            });
+        }
+
+        // Live Health Polling Logic
+        const services = [
+            { id: 'config-health', url: '/config-server/actuator/health' },
+            { id: 'eureka-health', url: '/eureka-server/actuator/health' },
+            { id: 'gateway-health', url: '/actuator/health' },
+            { id: 'auth-health', url: '/auth-service/actuator/health' }
+        ];
+
+        // Adaptive URLs if page is opened as static file: file:///...
+        const isLocalFile = window.location.protocol === 'file:';
+        if (isLocalFile) {
+            services[0].url = 'https://localhost:8888/actuator/health';
+            services[1].url = 'https://localhost:8761/actuator/health';
+            services[2].url = 'https://localhost:8080/actuator/health';
+            services[3].url = 'https://localhost:8080/auth-service/actuator/health';
+            
+            // Adjust raw JSON links to be absolute as well
+            document.getElementById('config-health-link').href = 'https://localhost:8888/actuator/health';
+            document.getElementById('eureka-health-link').href = 'https://localhost:8761/actuator/health';
+            document.getElementById('gateway-health-link').href = 'https://localhost:8080/actuator/health';
+            document.getElementById('auth-health-link').href = 'https://localhost:8080/auth-service/actuator/health';
+        }
+
+        async function checkHealth(service) {
+            const indicator = document.getElementById(service.id);
+            const badge = document.getElementById(service.id + '-text');
+            
+            try {
+                const response = await fetch(service.url, { 
+                    method: 'GET',
+                    mode: 'cors',
+                    credentials: 'omit'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.status === 'UP') {
+                        indicator.className = 'health-indicator active';
+                        badge.innerText = 'UP';
+                        badge.style.color = '#ffffff';
+                        badge.style.background = 'rgba(16, 185, 129, 0.2)';
+                    } else {
+                        indicator.className = 'health-indicator down';
+                        badge.innerText = 'DOWN';
+                        badge.style.color = '#ffffff';
+                        badge.style.background = 'rgba(239, 68, 68, 0.2)';
+                    }
+                } else {
+                    indicator.className = 'health-indicator warning';
+                    badge.innerText = `ERR ${response.status}`;
+                    badge.style.color = '#ffffff';
+                    badge.style.background = 'rgba(245, 158, 11, 0.2)';
+                }
+            } catch (err) {
+                // SSL Handshake block or CORS restriction
+                indicator.className = 'health-indicator warning';
+                badge.innerText = 'SSL / BLOCKED';
+                badge.style.color = '#ffffff';
+                badge.style.background = 'rgba(245, 158, 11, 0.2)';
+            }
+        }
+
+        async function fetchRegisteredApps() {
+            const container = document.getElementById('registered-apps-list');
+            try {
+                // Query Eureka registry via local/proxied route
+                const registryUrl = isLocalFile ? 'https://localhost:8761/eureka/apps' : '/eureka-server/eureka/apps';
+                const response = await fetch(registryUrl, {
+                    headers: { 'Accept': 'application/json' }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    const appsList = data.applications.application || [];
+                    const apps = Array.isArray(appsList) ? appsList : [appsList];
+                    
+                    if (apps.length === 0 || (apps.length === 1 && !apps[0])) {
+                        container.innerHTML = '<div style="color:var(--text-muted); font-size:0.95rem; text-align:center; padding:1rem 0;">No active microservices registered in Eureka.</div>';
+                        return;
+                    }
+                    
+                    let html = '';
+                    apps.forEach(app => {
+                        const instancesList = app.instance || [];
+                        const instances = Array.isArray(instancesList) ? instancesList : [instancesList];
+                        
+                        instances.forEach(inst => {
+                            const portVal = inst.port && inst.port['$'] ? inst.port['$'] : 'unknown';
+                            const serviceColor = app.name.includes('GATEWAY') ? '#6366f1' : 
+                                                 app.name.includes('AUTH') ? '#a855f7' : '#10b981';
+                            
+                            html += `
+                                <div style="display:flex; justify-content:space-between; align-items:center; padding:0.75rem 1rem; background:rgba(255,255,255,0.02); border:1px solid var(--card-border); border-radius:10px;">
+                                    <div>
+                                        <div style="font-weight:700; font-size:0.95rem; color:${serviceColor}; letter-spacing:0.02em;">${app.name}</div>
+                                        <div style="font-size:0.8rem; color:var(--text-muted); font-family:var(--mono-font); margin-top:0.15rem;">
+                                            ${inst.instanceId} (${inst.ipAddr}:${portVal})
+                                        </div>
+                                    </div>
+                                    <span style="font-size:0.75rem; font-weight:700; color:#10b981; background:rgba(16, 185, 129, 0.15); border:1px solid rgba(16, 185, 129, 0.25); padding:0.2rem 0.5rem; border-radius:6px;">${inst.status}</span>
+                                </div>
+                            `;
+                        });
+                    });
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = `<div style="color:var(--danger); font-size:0.95rem; text-align:center; padding:1rem 0;">Failed to load registry (${response.status})</div>`;
+                }
+            } catch (err) {
+                container.innerHTML = '<div style="color:var(--warning); font-size:0.95rem; text-align:center; padding:1rem 0;">Eureka registry unreachable (check SSL trust or CORS)</div>';
+            }
+        }
+
+        function pollAll() {
+            services.forEach(checkHealth);
+            fetchRegisteredApps();
+        }
+
+        // Poll immediately, then every 5 seconds
+        pollAll();
+        setInterval(pollAll, 5000);
+    </script>
+</body>
+</html>

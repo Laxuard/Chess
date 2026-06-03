@@ -29,6 +29,14 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 ---
 
+## 🖥️ Developer Workspace Control Center
+
+We have compiled all of your local dashboard endpoints, live container healthchecks, and CLI command cheatsheets into a clean, modern web interface. Open this file in your browser to manage your cluster:
+
+👉 **[Launch Interactive Developer Portal (developer-portal.html)](file:///home/laxuard/1337/Microservices/developer-portal.html)**
+
+---
+
 ## 📂 Project Directory Structure
 
 ```

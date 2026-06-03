@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Logo from '../components/Logo';
 import { useAuth } from '../context/AuthContext';
-import { getUsers, getMfaSetup, confirmMfaSetup, unlinkOAuth2Provider, redirectToGoogleOAuth, redirectToFortyTwoOAuth } from '../services/api';
+import { getUsers, getMfaSetup, confirmMfaSetup, unlinkOAuth2Provider, redirectToGoogleOAuth, redirectToFortyTwoOAuth, setLocalPassword } from '../services/api';
 import { QRCodeSVG } from 'qrcode.react';
 
 export default function DashboardScreen() {
@@ -24,6 +24,12 @@ export default function DashboardScreen() {
   // Link status notifications
   const [linkMessage, setLinkMessage] = useState('');
   const [linkError, setLinkError] = useState('');
+
+  // Password-binding state
+  const [newPassword, setNewPassword] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
 
   // Validate session on dashboard load and populate profile context
   useEffect(() => {
@@ -82,6 +88,40 @@ export default function DashboardScreen() {
       }
     } catch (err) {
       setLinkError('Error contacting Gateway service.');
+    }
+  };
+
+  const handleSetPassword = async (e) => {
+    e.preventDefault();
+    if (!newPassword) {
+      setPasswordError('Please enter a password.');
+      return;
+    }
+    if (profile && profile.hasPassword && !currentPassword) {
+      setPasswordError('Please enter your current password to verify identity.');
+      return;
+    }
+    setPasswordError('');
+    setPasswordSuccess('');
+    setLoading(true);
+
+    try {
+      const { status, data } = await setLocalPassword(newPassword, currentPassword);
+      if (status === 200) {
+        setPasswordSuccess('Local password updated successfully!');
+        setNewPassword('');
+        setCurrentPassword('');
+        const response = await getUsers();
+        if (response.status === 200) {
+          setProfile(response.data);
+        }
+      } else {
+        setPasswordError(data.message || 'Failed to update local password.');
+      }
+    } catch (err) {
+      setPasswordError('Error connecting to auth service.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -592,6 +632,84 @@ export default function DashboardScreen() {
                     {isLinked('FORTYTWO') ? 'Disconnect' : 'Connect'}
                   </button>
                 </div>
+
+                <div className="divider" style={{ margin: '24px 0' }}><span className="divider__line" /></div>
+
+                {/* Local Account Password Binding */}
+                <div>
+                  <h3 className="text-display" style={{ fontSize: '1.25rem', marginBottom: '8px', color: 'var(--teal-glow)' }}>
+                    🗝️ Local Security Credentials
+                  </h3>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '16px' }}>
+                    Setup a security password to enable standard logging or safely sever social authentication links.
+                  </p>
+                </div>
+
+                {profile && profile.hasPassword ? (
+                  <div style={{ background: 'rgba(0, 240, 200, 0.02)', padding: '20px 24px', borderRadius: '8px', border: '1px solid var(--teal-glow)' }}>
+                    <span className="text-mono" style={{ color: 'var(--teal-glow)', display: 'block', fontSize: '0.9rem', marginBottom: '8px', fontWeight: 'bold' }}>
+                      ✓ Local Password Active
+                    </span>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0 }}>
+                      You can log in directly using your email/username and password, or safely manage linked accounts.
+                    </p>
+                  </div>
+                ) : (
+                  <div style={{ background: 'rgba(245, 158, 11, 0.04)', padding: '20px 24px', borderRadius: '8px', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
+                    <span className="text-mono" style={{ color: '#f59e0b', display: 'block', fontSize: '0.9rem', marginBottom: '8px', fontWeight: 'bold' }}>
+                      ⚠️ No Password Configured
+                    </span>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0 }}>
+                      Your profile currently relies exclusively on OAuth2 authentication. Bind a local password below to enable password login and allow disconnects.
+                    </p>
+                  </div>
+                )}
+
+                {passwordSuccess && (
+                  <div className="alert alert--success">
+                    {passwordSuccess}
+                  </div>
+                )}
+
+                {passwordError && (
+                  <div className="alert alert--error">
+                    {passwordError}
+                  </div>
+                )}
+
+                <form onSubmit={handleSetPassword} className="stack stack-4" style={{ background: 'rgba(255,255,255,0.01)', padding: '24px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+                  {profile && profile.hasPassword && (
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="currentPassword">
+                        Current Password
+                      </label>
+                      <input
+                        id="currentPassword"
+                        type="password"
+                        className="form-input"
+                        placeholder="••••••••••••"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                      />
+                    </div>
+                  )}
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="newPassword">
+                      {profile && profile.hasPassword ? 'New password' : 'Create new password'}
+                    </label>
+                    <input
+                      id="newPassword"
+                      type="password"
+                      className="form-input"
+                      placeholder="••••••••••••"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                    />
+                  </div>
+                  <button type="submit" className="btn btn-primary" disabled={loading} style={{ alignSelf: 'flex-start' }}>
+                    {loading ? 'Updating Password...' : profile && profile.hasPassword ? 'Change Password' : 'Bind Password'}
+                  </button>
+                </form>
               </div>
             </div>
           )}
