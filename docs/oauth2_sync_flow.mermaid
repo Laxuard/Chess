@@ -1,0 +1,41 @@
+sequenceDiagram
+    autonumber
+    participant Client as Client (Vite Browser)
+    participant Gateway as BFF Gateway (Spring Cloud Gateway)
+    participant Provider as OAuth2 Provider (Google / 42)
+    participant Redis as Redis Session Store
+    participant Auth as Auth Service (Spring Boot Backend)
+
+    Client->>Gateway: Click "Login with Google/42"<br>(GET /oauth2/authorization/google)
+    Note over Gateway: RedisServerOAuth2AuthorizationRequestRepository
+    Gateway->>Redis: Save OAuth2 Authorization Request state
+    Gateway-->>Client: Redirect (302) to Provider Consent Page
+    Client->>Provider: Redirect to OAuth2 consent / login screen
+    Note over Provider: User logs in & grants permissions
+    Provider-->>Client: Redirect back with auth code (GET /login/oauth2/code/google?code=abc)
+    Client->>Gateway: GET /login/oauth2/code/google?code=abc
+    Gateway->>Provider: Exchange Auth Code for Access Token
+    Provider-->>Gateway: Access Token Response
+    Gateway->>Provider: Fetch User Info (using Access Token)
+    Provider-->>Gateway: User Info JSON (email, username, sub/id)
+    
+    Note over Gateway: CustomOAuth2SuccessHandler
+    Gateway->>Gateway: Extract profile via OAuth2UserInfoCompositeExtractor
+    
+    Gateway->>Auth: POST /api/auth/oauth2/sync over mTLS (lb://auth-service)<br>Body: Sync payload (email, provider, providerId, etc.)
+    Note over Auth: OAuth2Service.syncUser()
+    Auth->>Auth: 1. Check if UserAuth exists by email<br>2. If not: Auto-register user<br>3. Check/create UserIdentity link<br>4. Determine user roles & MFA configuration
+    Auth-->>Gateway: Return JSON AuthStateResult (userId, roles, mfaEnabled)
+    
+    Note over Gateway: CustomOAuth2SuccessHandler processes response
+    Gateway->>Redis: Create HTTP Session in Redis
+    
+    alt MFA is Enabled on Account (mfaEnabled == true)
+        Gateway->>Redis: Set Session Attribute isFullyAuthenticated = false
+        Gateway-->>Client: Redirect to Frontend /mfa screen
+        Client->>Client: Load MfaChallengeScreen
+    else MFA is Disabled (mfaEnabled == false)
+        Gateway->>Redis: Set Session Attribute isFullyAuthenticated = true
+        Gateway-->>Client: Redirect to Frontend /dashboard screen
+        Client->>Client: Load DashboardScreen
+    end

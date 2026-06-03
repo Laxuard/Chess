@@ -39,7 +39,7 @@ services:
     container_name: redis-commander
     environment:
       - REDIS_HOST=redis-container
-      - REDIS_PORT=6379               # Always use the container's internal port here
+      - REDIS_PORT=${REDIS_PORT}               # Always use the container's internal port here
       - REDIS_PASSWORD=${REDIS_PASSWORD}
     ports:
       - "6381:8081"                   # Binds your laptop's 6381 to container's 8081

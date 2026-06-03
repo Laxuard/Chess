@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Establish root directory execution path (run from scripts/ folder or root)
+cd "$(dirname "$0")/.."
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  Transcendence — mTLS Certificate Manager
 #

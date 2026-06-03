@@ -1,0 +1,41 @@
+erDiagram
+    USER_AUTH {
+        bigint id PK
+        uuid user_id UK
+        varchar email UK
+        varchar username UK
+        varchar password "Nullable for OAuth2 users"
+        boolean enabled
+        boolean account_locked
+        boolean deleted
+    }
+
+    USER_ROLES {
+        bigint user_auth_id FK
+        varchar role "USER, ADMIN, etc."
+    }
+
+    USER_IDENTITY {
+        bigint id PK
+        bigint user_id FK
+        varchar provider "GOOGLE, FORTYTWO"
+        varchar provider_id "OAuth provider specific ID"
+        timestamp last_login_at
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    USER_TWO_FACTOR_METHODS {
+        bigint id PK
+        bigint user_id FK
+        varchar method_type "TOTP"
+        varchar secret_key "Encrypted secret key"
+        boolean is_verified
+        timestamp last_used_at
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    USER_AUTH ||--|{ USER_ROLES : "defines roles"
+    USER_AUTH ||--|{ USER_IDENTITY : "authenticates via"
+    USER_AUTH ||--|{ USER_TWO_FACTOR_METHODS : "secures with"

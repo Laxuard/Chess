@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# Establish root directory execution path (run from scripts/ folder or root)
+cd "$(dirname "$0")/.."
+
 # ==============================================================================
 # 🚀 AI CONTEXT GENERATOR - TOKEN OPTIMIZER
 # ==============================================================================

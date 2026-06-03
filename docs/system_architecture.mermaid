@@ -1,0 +1,75 @@
+flowchart TB
+    %% Nodes styling
+    classDef client fill:#3b82f6,stroke:#1d4ed8,stroke-width:2px,color:#fff;
+    classDef public fill:#ef4444,stroke:#b91c1c,stroke-width:2px,color:#fff;
+    classDef internal fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff;
+    classDef db fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#fff;
+    classDef infra fill:#6b7280,stroke:#374151,stroke-width:2px,color:#fff;
+
+    subgraph External_Network ["External Clients"]
+        Browser["React/Vite Frontend App<br>(Browser)"]:::client
+    end
+
+    subgraph Host_Machine ["Host Machine (Local Dev / Docker Bridge)"]
+        subgraph Exposed_Ports ["Port Mappings to Host"]
+            GatewayPort["Gateway Port<br>:8080 (HTTPS)"]:::public
+            DbPort["Postgres Port<br>:5432 (TCP)"]:::infra
+            RedisPort["Redis Port<br>:6379 (TCP)"]:::infra
+            RedisCommanderPort["Redis Commander Port<br>:6381 (HTTP)"]:::infra
+            RabbitPort["RabbitMQ AMQP/UI Ports<br>:5672 / :15672"]:::infra
+        end
+
+        subgraph transcendence_net ["transcendence-net (Docker Bridge Network)"]
+            %% Public Entrypoint
+            Gateway["Gateway Service (BFF)<br>Spring Cloud Gateway<br>(https://gateway:8080)"]:::public
+
+            %% Internal Microservices
+            AuthService["Auth Service<br>Spring Boot / Security<br>(https://auth-service:8081)"]:::internal
+            EurekaServer["Eureka Registry Server<br>Spring Cloud Eureka<br>(https://eureka-server:8761)"]:::internal
+            ConfigServer["Config Server<br>Spring Cloud Config<br>(https://config-server:8888)"]:::internal
+
+            %% Infrastructure & Databases
+            Postgres["PostgreSQL Database<br>(postgres-db:5432)"]:::db
+            Redis["Redis Cache & Session Store<br>(redis-container:6379)"]:::db
+            RabbitMQ["RabbitMQ Broker<br>(rabbitmq:5672)"]:::db
+            RedisCommander["Redis Commander (Admin GUI)<br>(redis-commander:8081)"]:::infra
+        end
+        
+        ConfigRepo["Local Config Repo<br>(./config-repo)"]:::infra
+    end
+
+    %% Communication Links
+    Browser -->|"HTTPS / WSS"| GatewayPort
+    GatewayPort --> Gateway
+
+    %% Config server loading
+    ConfigServer -.->|Reads YAML Config| ConfigRepo
+    
+    %% Service Discovery Registration
+    Gateway -.->|Register / Locate| EurekaServer
+    AuthService -.->|Register / Locate| EurekaServer
+
+    %% Config retrieval (mTLS)
+    Gateway ==>|"mTLS / HTTPS"| ConfigServer
+    AuthService ==>|"mTLS / HTTPS"| ConfigServer
+    EurekaServer ==>|"mTLS / HTTPS"| ConfigServer
+
+    %% Downstream Service Calls (mTLS)
+    Gateway ==>|"mTLS / HTTPS (lb://auth-service)"| AuthService
+
+    %% Database & Cache Connections
+    Gateway -->|Redis Sessions & OAuth State| Redis
+    AuthService -->|User Credentials & DB| Postgres
+    AuthService -->|Redis Sessions| Redis
+    RedisCommander -->|Admin GUI Monitoring| Redis
+    
+    %% Port exposures
+    Postgres -.-> DbPort
+    Redis -.-> RedisPort
+    RedisCommander -.-> RedisCommanderPort
+    RabbitMQ -.-> RabbitPort
+
+    %% Legend
+    style External_Network fill:#e0f2fe,stroke:#0284c7,stroke-width:2px;
+    style Host_Machine fill:#f8fafc,stroke:#64748b,stroke-width:2px;
+    style transcendence_net fill:#f1f5f9,stroke:#475569,stroke-width:2px,stroke-dasharray: 5 5;

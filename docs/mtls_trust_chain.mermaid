@@ -1,0 +1,44 @@
+flowchart TD
+    %% Nodes styling
+    classDef ca fill:#ef4444,stroke:#b91c1c,stroke-width:2px,color:#fff;
+    classDef keystore fill:#3b82f6,stroke:#1d4ed8,stroke-width:2px,color:#fff;
+    classDef truststore fill:#f59e0b,stroke:#d97706,stroke-width:2px,color:#fff;
+    classDef service fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff;
+
+    RootCA["Root CA (rootCA.crt)<br>Authority Certificate"]:::ca
+
+    subgraph ConfigServerSec ["Config Server Security Context"]
+        ConfigKS["Keystore: config-server.p12<br>(Private Key + Signed Certificate)"]:::keystore
+        ConfigTS["Truststore: truststore.p12<br>(Contains rootCA.crt)"]:::truststore
+    end
+
+    subgraph EurekaServerSec ["Eureka Server Security Context"]
+        EurekaKS["Keystore: eureka-server.p12<br>(Private Key + Signed Certificate)"]:::keystore
+        EurekaTS["Truststore: truststore.p12<br>(Contains rootCA.crt)"]:::truststore
+    end
+
+    subgraph GatewaySec ["BFF Gateway Security Context"]
+        GatewayKS["Keystore: gateway.p12<br>(Private Key + Signed Certificate)"]:::keystore
+        GatewayTS["Truststore: truststore.p12<br>(Contains rootCA.crt)"]:::truststore
+    end
+
+    subgraph AuthServiceSec ["Auth Service Security Context"]
+        AuthKS["Keystore: auth-service.p12<br>(Private Key + Signed Certificate)"]:::keystore
+        AuthTS["Truststore: truststore.p12<br>(Contains rootCA.crt)"]:::truststore
+    end
+
+    %% CA Signing Relations
+    RootCA -.->|Signs & Establishes Identity| ConfigKS
+    RootCA -.->|Signs & Establishes Identity| EurekaKS
+    RootCA -.->|Signs & Establishes Identity| GatewayKS
+    RootCA -.->|Signs & Establishes Identity| AuthKS
+
+    %% CA Trust Relations
+    RootCA -->|Imported into| ConfigTS
+    RootCA -->|Imported into| EurekaTS
+    RootCA -->|Imported into| GatewayTS
+    RootCA -->|Imported into| AuthTS
+
+    %% Inter-service verification example
+    GatewayKS ==>|1. Presents certificate| AuthServiceSec
+    AuthTS -.->|2. Verifies certificate matches Root CA| GatewayKS

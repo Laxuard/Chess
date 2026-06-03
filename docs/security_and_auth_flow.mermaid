@@ -1,0 +1,40 @@
+sequenceDiagram
+    autonumber
+    participant Client as Client (Vite Browser)
+    participant Gateway as BFF Gateway (Spring Cloud Gateway)
+    participant Redis as Redis Session Store
+    participant Auth as Auth Service (Spring Boot Backend)
+
+    Client->>Gateway: HTTP Request (GET /api/auth/users) with Cookie: SESSION=xyz
+    Note over Gateway: Gateway Interceptor: Eager Cookie check
+    alt Missing SESSION Cookie
+        Gateway-->>Client: 401 Unauthorized
+    else SESSION Cookie Present
+        Gateway->>Redis: Get Session attributes (SESSION=xyz)
+        Redis-->>Gateway: Session details: { userId: "uuid-123", roles: ["USER"], isFullyAuthenticated: true }
+        
+        Note over Gateway: TwoFactorCheckGatewayFilterFactory
+        alt isFullyAuthenticated != true
+            Gateway-->>Client: 403 Forbidden (MFA verification required)
+        else Session is Fully Authenticated
+            Note over Gateway: SessionToJwtGatewayFilterFactory
+            Gateway->>Gateway: Mint short-lived transit JWT
+            Note over Gateway: Payload contains: sub="uuid-123", roles=["USER"], sessionId="xyz", traceId="uuid-abc"
+            Note over Gateway: Signed with Gateway's RSA Private Key
+            
+            Gateway->>Gateway: Mutate Request:<br>1. Strip 'Cookie: SESSION' (Prevent downstream leakage)<br>2. Add 'Authorization: Bearer <transitJwt>'
+            
+            Gateway->>Auth: Forward mutated request over mTLS (lb://auth-service)
+            
+            Note over Auth: JwtAuthenticationFilter / Spring Security
+            alt Auth Service doesn't have Gateway JWKS key cached
+                Auth->>Gateway: GET /certs/jwks (Fetch Gateway's RSA Public Key over mTLS)
+                Gateway-->>Auth: JWKS response (Public Keys)
+            end
+            Note over Auth: Validate Transit JWT Signature using Gateway Public Key
+            
+            Auth->>Auth: Complete business logic for /users
+            Auth-->>Gateway: HTTP 200 OK (with data / text)
+            Gateway-->>Client: HTTP 200 OK (Response with JSON or Text)
+        end
+    end
