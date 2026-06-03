@@ -90,46 +90,6 @@ spring:
                 - SessionToJwt
                 - TwoFactorCheck
 
-            # Node.js Service Route (Test Drive)
-            - id: nodejs-service-route
-              uri: lb://nodejs-service
-              order: 5
-              predicates:
-                - Path=/api/node/**
-              filters:
-                - StripPrefix=2
-                - SessionToJwt
-
-            # Python Service Route (Test Drive)
-            - id: python-service-route
-              uri: lb://python-service
-              order: 6
-              predicates:
-                - Path=/api/python/**
-              filters:
-                - StripPrefix=2
-                - SessionToJwt
-
-
-
-
-            # Auto-Generated Route for billing-service
-            - id: billing-service-route
-              uri: lb://billing-service
-              predicates:
-                - Path=/api/billing/**
-              filters:
-                - StripPrefix=2
-                - SessionToJwt
-
-            # Auto-Generated Route for chat-service
-            - id: chat-service-route
-              uri: lb://chat-service
-              predicates:
-                - Path=/api/chat/**
-              filters:
-                - StripPrefix=2
-                - SessionToJwt
 # ==========================================
 # OPENAPI / SWAGGER AGGREGATION CONFIGURATION
 # ==========================================
