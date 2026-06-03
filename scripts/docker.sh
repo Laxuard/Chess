@@ -50,7 +50,7 @@ check_env_symlink() {
 
 remove_conflicts() {
     info "Purging potential container name conflicts..."
-    docker rm -f postgres-db redis-container redis-commander rabbitmq config-server eureka-server auth-service gateway >/dev/null 2>&1 || true
+    docker rm -f postgres-db redis-container redis-commander rabbitmq pgweb config-server eureka-server auth-service gateway >/dev/null 2>&1 || true
 }
 
 wait_for_infra() {
