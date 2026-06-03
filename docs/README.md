@@ -50,29 +50,29 @@ flowchart TB
     end
 
     %% Communication Links
-    Browser -->|HTTPS / WSS| GatewayPort
+    Browser -->|"HTTPS / WSS"| GatewayPort
     GatewayPort --> Gateway
 
     %% Config server loading
-    ConfigServer -.->|Reads YAML Config| ConfigRepo
+    ConfigServer -.->|"Reads YAML Config"| ConfigRepo
     
     %% Service Discovery Registration
-    Gateway -.->|Register / Locate| EurekaServer
-    AuthService -.->|Register / Locate| EurekaServer
+    Gateway -.->|"Register / Locate"| EurekaServer
+    AuthService -.->|"Register / Locate"| EurekaServer
 
     %% Config retrieval (mTLS)
-    Gateway ==>|mTLS / HTTPS| ConfigServer
-    AuthService ==>|mTLS / HTTPS| ConfigServer
-    EurekaServer ==>|mTLS / HTTPS| ConfigServer
+    Gateway ==>|"mTLS / HTTPS"| ConfigServer
+    AuthService ==>|"mTLS / HTTPS"| ConfigServer
+    EurekaServer ==>|"mTLS / HTTPS"| ConfigServer
 
     %% Downstream Service Calls (mTLS)
-    Gateway ==>|mTLS / HTTPS to auth-service| AuthService
+    Gateway ==>|"mTLS / HTTPS (lb://auth-service)"| AuthService
 
     %% Database & Cache Connections
-    Gateway -->|Redis Sessions & OAuth State| Redis
-    AuthService -->|User Credentials & DB| Postgres
-    AuthService -->|Redis Sessions| Redis
-    RedisCommander -->|Admin GUI Monitoring| Redis
+    Gateway -->|"Redis Sessions & OAuth State"| Redis
+    AuthService -->|"User Credentials & DB"| Postgres
+    AuthService -->|"Redis Sessions"| Redis
+    RedisCommander -->|"Admin GUI Monitoring"| Redis
     
     %% Port exposures
     Postgres -.-> DbPort
@@ -91,15 +91,68 @@ flowchart TB
 
 ---
 
+## 📂 Directory Layout & Project Structure
+
+The project has been organized into logical directories to ensure scalability, ease of development, and clear separation of responsibilities:
+
+```
+.
+├── certs/                      # Generated mTLS certificates and keystores (gitignored)
+├── config/                     # Configuration configurations & directories
+│   └── config-repo/            # Local Git-managed properties repository (Spring Config Server backend)
+├── docker/                     # Docker Compose deployment manifests
+│   ├── docker-compose.yml      # Base infrastructure stack (DB, Redis, RabbitMQ)
+│   ├── docker-compose.apps.yml # Applications and microservices stack
+│   └── env.example             # Example environment file template
+├── docs/                       # Architectural documentation and diagrams
+│   └── README.md               # Main Architecture & Developer Guide (This file)
+├── scripts/                    # Shared administrative and automation utilities
+│   ├── build-all.sh            # Packages Java applications and builds frontend production bundle
+│   ├── clean.sh                # Hard reset script (containers, certs, logs, targets)
+│   ├── docker.sh               # Local compose and service management orchestrator
+│   ├── frontend.sh             # Vite developer proxy scripts to run commands from root
+│   ├── generate-ai-context.sh  # Scans project files and builds MD context summaries
+│   └── mtls-setup.sh           # Generates Mock CA and TLS trust chain assets
+├── services/                   # Application codebases
+│   ├── auth-service/           # User authorization and TOTP validation engine
+│   ├── config-server/          # Spring Cloud Config configuration gateway
+│   ├── eureka-server/          # Netflix Eureka Service registry
+│   ├── frontend/               # React / Vite SPA frontend application
+│   └── gateway/                # BFF Spring Cloud Gateway authentication translation proxy
+├── .env                        # Central environment configuration variables (not committed)
+└── project_codebase_context.md # Auto-generated AI reference workspace file (optimized tokens)
+```
+
+---
+
+## 🔌 Port Allocation Map
+
+To avoid port conflicts and ensure secure boundaries, only the **Gateway BFF** and infrastructure management GUIs are exposed directly to the Host Machine. All core microservice-to-microservice traffic is locked within the internal Docker network.
+
+| Service Name | Protocol / Scheme | Internal Container Port | Host Bind Port | Network Scope | Purpose / Description |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **BFF Gateway** | HTTPS / WSS | `8080` | `8080` | **Exposed (Public)** | External entrypoint for the Frontend client |
+| **Auth Service** | HTTPS | `8081` | *None* | **Internal Only** | Handles authentication requests via service discovery |
+| **Eureka Server** | HTTPS | `8761` | *None* | **Internal Only** | Metadata discovery server registry |
+| **Config Server** | HTTPS | `8888` | *None* | **Internal Only** | Centralized bootstrap configurations provider |
+| **PostgreSQL Database** | TCP / JDBC | `5432` | `5432` | Host Access Bind | Storage engine containing user databases |
+| **Redis Cache** | TCP | `6379` | `6380` | Host Access Bind | Caching server and shared session store |
+| **Redis Commander** | HTTP | `8081` | `6381` | **Exposed (Public)** | Web administrative GUI to inspect Redis cache sessions |
+| **RabbitMQ Core** | AMQP | `5672` | `5672` | Host Access Bind | Internal asynchronous message broker |
+| **RabbitMQ UI** | HTTP | `15672` | `15672` | **Exposed (Public)** | Web administration dashboard for RabbitMQ |
+| **Vite Dev Server** | HTTP | `5173` | `5173` | **Exposed (Public)** | Local developer server running host-side |
+
+---
+
 ## 🔒 Request Authentication & Gateway-to-Backend Translation
 
 To secure downstream microservices, the BFF Gateway translates stateful browser sessions into stateless JSON Web Tokens (JWTs). Downstream microservices only accept requests signed with the Gateway's private key.
 
 ### Authentication Translation Lifecycle:
-1. **Session Cookie Propagation**: The Vite client ([api.js](file:///home/yjazouli/1337/Microservices/frontend/src/services/api.js)) initiates requests specifying `credentials: "include"`.
+1. **Session Cookie Propagation**: The Vite client ([api.js](file:///home/yjazouli/1337/Microservices/services/frontend/src/services/api.js)) initiates requests specifying `credentials: "include"`.
 2. **Session Verification**: The Gateway intercepts the request and queries Redis to extract the user's `userId`, `roles`, and `isFullyAuthenticated` attributes.
-3. **MFA Check**: [TwoFactorCheckGatewayFilterFactory](file:///home/yjazouli/1337/Microservices/gateway/src/main/java/com/ft_transcendence/gateway/core/filter/TwoFactorCheckGatewayFilterFactory.java) blocks users whose session attribute `isFullyAuthenticated` is `false` (demanding completion of the MFA challenge).
-4. **Transit JWT Minting**: [SessionToJwtGatewayFilterFactory](file:///home/yjazouli/1337/Microservices/gateway/src/main/java/com/ft_transcendence/gateway/core/filter/SessionToJwtGatewayFilterFactory.java) generates a short-lived JWT containing the user metadata and signs it with the Gateway's RSA private key.
+3. **MFA Check**: [TwoFactorCheckGatewayFilterFactory](file:///home/yjazouli/1337/Microservices/services/gateway/src/main/java/com/ft_transcendence/gateway/core/filter/TwoFactorCheckGatewayFilterFactory.java) blocks users whose session attribute `isFullyAuthenticated` is `false` (demanding completion of the MFA challenge).
+4. **Transit JWT Minting**: [SessionToJwtGatewayFilterFactory](file:///home/yjazouli/1337/Microservices/services/gateway/src/main/java/com/ft_transcendence/gateway/core/filter/SessionToJwtGatewayFilterFactory.java) generates a short-lived JWT containing the user metadata and signs it with the Gateway's RSA private key.
 5. **Cookie Stripping**: The Gateway strips the `Cookie: SESSION` header from the request to prevent token/session hijacking downstream.
 6. **Authorization Header Inject**: The Gateway injects the `Authorization: Bearer <transitJwt>` header.
 7. **Downstream Execution**: The request is routed via service discovery to the target microservice over mTLS. The target microservice validates the signature of the transit JWT against the Gateway's JWKS public endpoint.
@@ -158,8 +211,8 @@ The Gateway hosts OAuth2 Client configurations. When a user authenticates via th
 
 ### Synchronization Logic:
 1. The user logs in via the provider (e.g. Google).
-2. The Gateway's [CustomOAuth2SuccessHandler](file:///home/yjazouli/1337/Microservices/gateway/src/main/java/com/ft_transcendence/gateway/security/oauth2/CustomOAuth2SuccessHandler.java) intercepts success, extracts profile attributes, and makes a secure, backend-to-backend mTLS call to [OAuth2Controller](file:///home/yjazouli/1337/Microservices/auth-service/src/main/java/com/ft_transcendence/auth/domain/controller/OAuth2Controller.java)'s `/api/auth/oauth2/sync` endpoint.
-3. [OAuth2Service](file:///home/yjazouli/1337/Microservices/auth-service/src/main/java/com/ft_transcendence/auth/domain/service/OAuth2Service.java) reconciles the account in Postgres: registers user if non-existent, links the provider details, and returns user roles and MFA activation state.
+2. The Gateway's [CustomOAuth2SuccessHandler](file:///home/yjazouli/1337/Microservices/services/gateway/src/main/java/com/ft_transcendence/gateway/security/oauth2/CustomOAuth2SuccessHandler.java) intercepts success, extracts profile attributes, and makes a secure, backend-to-backend mTLS call to [OAuth2Controller](file:///home/yjazouli/1337/Microservices/services/auth-service/src/main/java/com/ft_transcendence/auth/domain/controller/OAuth2Controller.java)'s `/api/auth/oauth2/sync` endpoint.
+3. [OAuth2Service](file:///home/yjazouli/1337/Microservices/services/auth-service/src/main/java/com/ft_transcendence/auth/domain/service/OAuth2Service.java) reconciles the account in Postgres: registers user if non-existent, links the provider details, and returns user roles and MFA activation state.
 4. The Gateway updates the session state in Redis: if MFA is enabled, `isFullyAuthenticated` is set to `false`, and the user is redirected to the `/mfa` challenge screen on the React frontend. Otherwise, they are redirected to `/dashboard`.
 
 ```mermaid
@@ -215,9 +268,9 @@ sequenceDiagram
 
 All user accounts, roles, linked identities, and multi-factor credentials are persisted in the PostgreSQL database schema managed by `auth-service`.
 
-- [UserAuth.java](file:///home/yjazouli/1337/Microservices/auth-service/src/main/java/com/ft_transcendence/auth/domain/model/UserAuth.java) stores user authentication details.
-- [UserIdentity.java](file:///home/yjazouli/1337/Microservices/auth-service/src/main/java/com/ft_transcendence/auth/domain/model/UserIdentity.java) represents third-party linked social accounts (Google/42).
-- [UserTwoFactorMethod.java](file:///home/yjazouli/1337/Microservices/auth-service/src/main/java/com/ft_transcendence/auth/domain/model/twofactor/UserTwoFactorMethod.java) holds secret keys for TOTP (authenticator applications).
+- [UserAuth.java](file:///home/yjazouli/1337/Microservices/services/auth-service/src/main/java/com/ft_transcendence/auth/domain/model/UserAuth.java) stores user authentication details.
+- [UserIdentity.java](file:///home/yjazouli/1337/Microservices/services/auth-service/src/main/java/com/ft_transcendence/auth/domain/model/UserIdentity.java) represents third-party linked social accounts (Google/42).
+- [UserTwoFactorMethod.java](file:///home/yjazouli/1337/Microservices/services/auth-service/src/main/java/com/ft_transcendence/auth/domain/model/twofactor/UserTwoFactorMethod.java) holds secret keys for TOTP (authenticator applications).
 
 ```mermaid
 erDiagram
@@ -273,7 +326,7 @@ erDiagram
 To guarantee zero-trust security inside the bridge network, every service-to-service connection requires **Mutual TLS (mTLS)**.
 - Each service has a dedicated PKCS12 keystore (`.p12`) containing its private key and signed certificate.
 - Each service mounts a shared truststore containing the Root CA certificate (`rootCA.crt`).
-- Certificates are generated programmatically via [mtls-setup.sh](file:///home/yjazouli/1337/Microservices/mtls-setup.sh).
+- Certificates are generated programmatically via [mtls-setup.sh](file:///home/yjazouli/1337/Microservices/scripts/mtls-setup.sh).
 
 ```mermaid
 flowchart TD
@@ -306,20 +359,20 @@ flowchart TD
     end
 
     %% CA Signing Relations
-    RootCA -.->|Signs & Establishes Identity| ConfigKS
-    RootCA -.->|Signs & Establishes Identity| EurekaKS
-    RootCA -.->|Signs & Establishes Identity| GatewayKS
-    RootCA -.->|Signs & Establishes Identity| AuthKS
+    RootCA -.->|"Signs & Establishes Identity"| ConfigKS
+    RootCA -.->|"Signs & Establishes Identity"| EurekaKS
+    RootCA -.->|"Signs & Establishes Identity"| GatewayKS
+    RootCA -.->|"Signs & Establishes Identity"| AuthKS
 
     %% CA Trust Relations
-    RootCA -->|Imported into| ConfigTS
-    RootCA -->|Imported into| EurekaTS
-    RootCA -->|Imported into| GatewayTS
-    RootCA -->|Imported into| AuthTS
+    RootCA -->|"Imported into"| ConfigTS
+    RootCA -->|"Imported into"| EurekaTS
+    RootCA -->|"Imported into"| GatewayTS
+    RootCA -->|"Imported into"| AuthTS
 
     %% Inter-service verification example
-    GatewayKS ==>|1. Presents certificate| AuthServiceSec
-    AuthTS -.->|2. Verifies certificate matches Root CA| GatewayKS
+    GatewayKS ==>|"1. Presents certificate"| AuthServiceSec
+    AuthTS -.->|"2. Verifies certificate matches Root CA"| GatewayKS
 ```
 
 > [!NOTE]
@@ -327,24 +380,75 @@ flowchart TD
 
 ---
 
-## 🛠️ Developer Configuration Quick-Start
+## 🛠️ Developer Configuration & Operational Quick-Start
 
-To run the environment locally:
-1. Ensure Docker is running.
-2. Initialize local certificates:
-   ```bash
-   ./mtls-setup.sh
-   ```
-3. Run the database and middleware containers:
-   ```bash
-   docker compose -f docker-compose.yml up -d
-   ```
-4. Run the Spring Boot microservices cluster:
-   ```bash
-   ./dev-start.sh
-   ```
-5. Spin up the Vite client:
-   ```bash
-   cd frontend
-   npm run dev
-   ```
+Follow these instructions to configure, compile, and run your development environment directly from the project home folder.
+
+### 1. Initialization and Certificate Setup
+Generate the Local Mock Certificate Authority and establish the microservice keystores:
+```bash
+./scripts/mtls-setup.sh
+```
+
+### 2. Compilation and Packaging
+Compile all Spring Boot Java services and compile the React production bundle (verifying code correctness):
+```bash
+./scripts/build-all.sh
+```
+
+### 3. Running Infrastructure and Databases
+Boot up database services, queues, cache containers, and wait for healthchecks to pass:
+```bash
+./scripts/docker.sh infra
+```
+
+### 4. Running Microservices Cluster
+Launch the configuration server, registry, authentication, and gateway microservices:
+```bash
+./scripts/docker.sh apps
+```
+*(Alternatively, run `sudo ./scripts/docker.sh up` to run both the infrastructure stack and applications in a single action).*
+
+### 5. Running the Frontend Dev Server
+Launch the React developer web server proxy from the root workspace folder:
+```bash
+./scripts/frontend.sh dev
+```
+*(Open browser to [http://localhost:5173](http://localhost:5173) to interact with the application).*
+
+---
+
+## 📂 Detailed Script Reference
+
+A set of specialized scripts have been added to the `/scripts/` folder to manage the development environment safely. All scripts run relocatably from any execution directory.
+
+### 1. `./scripts/clean.sh`
+Performs a deep project-wide reset. Use this script to clear states or resolve configuration updates:
+- Tars down all Docker containers running on the `transcendence` namespace.
+- Forces removal of potential naming collision containers (`postgres-db`, `gateway`, etc.).
+- Deletes the generated `certs/` directory.
+- Cleans and clears log directories.
+- Invokes `mvn clean` inside all backend microservice directories.
+- Wipes React frontend `dist/` and `.vite/` build outputs.
+
+### 2. `./scripts/build-all.sh`
+Performs project compile validations:
+- Loops through all Java services in `services/`, executing `./mvnw clean package -DskipTests` (using local wrapper or global installations).
+- Navigates to `services/frontend/`, resolves `npm install` automatically if `node_modules` is missing, and compiles static web assets with `npm run build`.
+
+### 3. `./scripts/docker.sh`
+Manages the Docker containers stack using Docker Compose and handles startup dependencies natively:
+- **`./scripts/docker.sh up`**: Boots infrastructure, polls `postgres-db` and `redis-container` status until healthy, and then builds/starts the Java apps.
+- **`./scripts/docker.sh down`**: Tears down the containers and purges Docker volumes.
+- **`./scripts/docker.sh infra`**: Starts only PostgreSQL, Redis, Redis Commander, and RabbitMQ.
+- **`./scripts/docker.sh apps`**: Starts only the Java microservices.
+- **`./scripts/docker.sh restart <service>`**: Rebuilds and restarts a specific container (e.g. `./scripts/docker.sh restart auth-service`).
+- **`./scripts/docker.sh logs [service]`**: Tails Docker logging outputs.
+- **`./scripts/docker.sh ps`**: Lists running container health statuses.
+
+### 4. `./scripts/frontend.sh`
+Provides root-level shortcuts to interact with the React Vite environment:
+- **`./scripts/frontend.sh dev`**: Launches the Vite hot-reloading development server (bootstraps `npm install` first if missing).
+- **`./scripts/frontend.sh build`**: Compiles production-ready frontend assets.
+- **`./scripts/frontend.sh install`**: Installs NPM packages.
+- **`./scripts/frontend.sh clean`**: Performs a force NPM install (wipes `node_modules`, `package-lock.json`, and rebuilds dependencies).

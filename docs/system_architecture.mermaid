@@ -43,11 +43,11 @@ flowchart TB
     GatewayPort --> Gateway
 
     %% Config server loading
-    ConfigServer -.->|Reads YAML Config| ConfigRepo
+    ConfigServer -.->|"Reads YAML Config"| ConfigRepo
     
     %% Service Discovery Registration
-    Gateway -.->|Register / Locate| EurekaServer
-    AuthService -.->|Register / Locate| EurekaServer
+    Gateway -.->|"Register / Locate"| EurekaServer
+    AuthService -.->|"Register / Locate"| EurekaServer
 
     %% Config retrieval (mTLS)
     Gateway ==>|"mTLS / HTTPS"| ConfigServer
@@ -58,10 +58,10 @@ flowchart TB
     Gateway ==>|"mTLS / HTTPS (lb://auth-service)"| AuthService
 
     %% Database & Cache Connections
-    Gateway -->|Redis Sessions & OAuth State| Redis
-    AuthService -->|User Credentials & DB| Postgres
-    AuthService -->|Redis Sessions| Redis
-    RedisCommander -->|Admin GUI Monitoring| Redis
+    Gateway -->|"Redis Sessions & OAuth State"| Redis
+    AuthService -->|"User Credentials & DB"| Postgres
+    AuthService -->|"Redis Sessions"| Redis
+    RedisCommander -->|"Admin GUI Monitoring"| Redis
     
     %% Port exposures
     Postgres -.-> DbPort

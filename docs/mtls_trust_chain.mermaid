@@ -28,17 +28,17 @@ flowchart TD
     end
 
     %% CA Signing Relations
-    RootCA -.->|Signs & Establishes Identity| ConfigKS
-    RootCA -.->|Signs & Establishes Identity| EurekaKS
-    RootCA -.->|Signs & Establishes Identity| GatewayKS
-    RootCA -.->|Signs & Establishes Identity| AuthKS
+    RootCA -.->|"Signs & Establishes Identity"| ConfigKS
+    RootCA -.->|"Signs & Establishes Identity"| EurekaKS
+    RootCA -.->|"Signs & Establishes Identity"| GatewayKS
+    RootCA -.->|"Signs & Establishes Identity"| AuthKS
 
     %% CA Trust Relations
-    RootCA -->|Imported into| ConfigTS
-    RootCA -->|Imported into| EurekaTS
-    RootCA -->|Imported into| GatewayTS
-    RootCA -->|Imported into| AuthTS
+    RootCA -->|"Imported into"| ConfigTS
+    RootCA -->|"Imported into"| EurekaTS
+    RootCA -->|"Imported into"| GatewayTS
+    RootCA -->|"Imported into"| AuthTS
 
     %% Inter-service verification example
-    GatewayKS ==>|1. Presents certificate| AuthServiceSec
-    AuthTS -.->|2. Verifies certificate matches Root CA| GatewayKS
+    GatewayKS ==>|"1. Presents certificate"| AuthServiceSec
+    AuthTS -.->|"2. Verifies certificate matches Root CA"| GatewayKS
