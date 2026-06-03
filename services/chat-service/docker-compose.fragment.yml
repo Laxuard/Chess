@@ -1,0 +1,31 @@
+services:
+  python-service:
+    build:
+      context: ./templates/python-fastapi # Path to the service folder
+      dockerfile: Dockerfile
+    image: transcendence-python-service:latest
+    container_name: python-service
+    environment:
+      - PORT=8082
+      - SPRING_APPLICATION_NAME=python-service
+      - EUREKA_URL=https://eureka-server:8761/eureka/
+      - CERT_DIR_PATH=/app/certs
+      - JWKS_URI=https://gateway:8080/.well-known/jwks.json
+      - JWT_PUBLIC_KEY_PATH=/app/certs/jwt/jwt_public.pem
+      - CERT_PASSWORD=${CERT_PASSWORD}
+    volumes:
+      - ./certs:/app/certs:ro # Mount the mTLS certificates directory read-only
+    healthcheck:
+      # Perform mTLS curls for docker healthchecking
+      test: [ "CMD", "curl", "-k", "--cert", "/app/certs/services/python-service/python-service.crt", "--key", "/app/certs/services/python-service/python-service.key", "-f", "https://localhost:8082/actuator/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      gateway:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - transcendence-net

@@ -2,6 +2,9 @@
 
 Welcome to the architectural documentation for the Transcendence Microservices ecosystem. This guide provides a detailed look at the network layout, security models, database schemas, and protocols that govern communications within our microservices network.
 
+> [!TIP]
+> **Looking to build a new service?** Check out the **[New Service Integration Guide (docs/new_service_integration.md)](file:///home/laxuard/1337/Microservices/docs/new_service_integration.md)** for step-by-step instructions, checklist, and duplicatable templates for Python (FastAPI) and Node.js (Express).
+
 ---
 
 ## 🏛️ System Architecture

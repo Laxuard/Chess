@@ -49,14 +49,17 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 For complete architectural details, sequence diagrams, and troubleshooting guidelines, please refer to our main documentation:
 
-👉 **[Transcendence Developer & Architecture Guide (docs/README.md)](file:///home/yjazouli/1337/Microservices/docs/README.md)**
+👉 **[Transcendence Developer & Architecture Guide (docs/README.md)](file:///home/laxuard/1337/Microservices/docs/README.md)**
+
+👉 **[New Service Integration Guide (docs/new_service_integration.md)](file:///home/laxuard/1337/Microservices/docs/new_service_integration.md)**: Instructions and templates to quickly build and register non-Java (Python, Node.js, etc.) microservices.
 
 Inside the guide you will find:
-- **[System Architecture Diagram](file:///home/yjazouli/1337/Microservices/docs/README.md#🏛️-system-architecture)**: Full network mapping of client, gateway, internal services, and databases.
-- **[Port Allocation Map](file:///home/yjazouli/1337/Microservices/docs/README.md#🔌-port-allocation-map)**: Host port mappings and internal container routing maps.
-- **[Authentication Translation Details](file:///home/yjazouli/1337/Microservices/docs/README.md#🔒-request-authentication--gateway-to-backend-translation)**: Sequences of how cookies translate into short-lived transit JWTs.
-- **[OAuth2 Reconcile Synchronization Flow](file:///home/yjazouli/1337/Microservices/docs/README.md#🔑-oauth2-authentication--account-synchronization-flow)**: Direct Google/42 social login integration sequence diagram.
-- **[Mutual TLS (mTLS) Trust Scheme](file:///home/yjazouli/1337/Microservices/docs/README.md#🔑-mutual-tls-mtls-security-scheme)**: How the custom PKCS12 keystore trust chains are structured.
-- **[Database Entity Relationships (ERD)](file:///home/yjazouli/1337/Microservices/docs/README.md#🗄️-database-entity-relationship-diagram-erd)**: Visual entity map of authorization and identity tables.
-- **[Detailed Script Command Catalog](file:///home/yjazouli/1337/Microservices/docs/README.md#📂-detailed-script-reference)**: Reference index for all commands in `clean.sh`, `build-all.sh`, `docker.sh`, and `frontend.sh`.
-- **[Troubleshooting Guide](file:///home/yjazouli/1337/Microservices/docs/README.md#🔍-troubleshooting--diagnostic-guide)**: Common errors, SSL handshake failures, container naming conflicts, and how to fix them.
+- **[System Architecture Diagram](file:///home/laxuard/1337/Microservices/docs/README.md#🏛️-system-architecture)**: Full network mapping of client, gateway, internal services, and databases.
+- **[Port Allocation Map](file:///home/laxuard/1337/Microservices/docs/README.md#🔌-port-allocation-map)**: Host port mappings and internal container routing maps.
+- **[Authentication Translation Details](file:///home/laxuard/1337/Microservices/docs/README.md#🔒-request-authentication--gateway-to-backend-translation)**: Sequences of how cookies translate into short-lived transit JWTs.
+- **[OAuth2 Reconcile Synchronization Flow](file:///home/laxuard/1337/Microservices/docs/README.md#🔑-oauth2-authentication--account-synchronization-flow)**: Direct Google/42 social login integration sequence diagram.
+- **[Mutual TLS (mTLS) Trust Scheme](file:///home/laxuard/1337/Microservices/docs/README.md#🔑-mutual-tls-mtls-security-scheme)**: How the custom PKCS12 keystore trust chains are structured.
+- **[Database Entity Relationships (ERD)](file:///home/laxuard/1337/Microservices/docs/README.md#🗄️-database-entity-relationship-diagram-erd)**: Visual entity map of authorization and identity tables.
+- **[Detailed Script Command Catalog](file:///home/laxuard/1337/Microservices/docs/README.md#📂-detailed-script-reference)**: Reference index for all commands in `clean.sh`, `build-all.sh`, `docker.sh`, and `frontend.sh`.
+- **[Troubleshooting Guide](file:///home/laxuard/1337/Microservices/docs/README.md#🔍-troubleshooting--diagnostic-guide)**: Common errors, SSL handshake failures, container naming conflicts, and how to fix them.
+

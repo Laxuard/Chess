@@ -130,7 +130,123 @@ services:
     networks:
       - transcendence-net
 
-# == 5. Bridge Network Connectivity ==
+  # == 5. Node.js Service (Test Drive) ==
+  nodejs-service:
+    build:
+      context: ../services/nodejs-service
+      dockerfile: Dockerfile
+    image: transcendence-nodejs-service:latest
+    container_name: nodejs-service
+    environment:
+      - PORT=8083
+      - SPRING_APPLICATION_NAME=nodejs-service
+      - EUREKA_URL=https://eureka-server:${EUREKA_PORT:-8761}/eureka/
+      - CERT_DIR_PATH=/app/certs
+      - JWKS_URI=https://gateway:${GATEWAY_PORT:-8080}/.well-known/jwks.json
+      - JWT_PUBLIC_KEY_PATH=/app/certs/jwt/jwt_public.pem
+      - CERT_PASSWORD=${CERT_PASSWORD}
+    volumes:
+      - ../certs:/app/certs:ro
+    healthcheck:
+      test: [ "CMD", "curl", "-k", "--cert", "/app/certs/services/nodejs-service/nodejs-service.crt", "--key", "/app/certs/services/nodejs-service/nodejs-service.key", "-f", "https://localhost:8083/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - transcendence-net
+
+  # == 6. Python Service (Test Drive) ==
+  python-service:
+    build:
+      context: ../services/python-service
+      dockerfile: Dockerfile
+    image: transcendence-python-service:latest
+    container_name: python-service
+    environment:
+      - PORT=8082
+      - SPRING_APPLICATION_NAME=python-service
+      - EUREKA_URL=https://eureka-server:${EUREKA_PORT:-8761}/eureka/
+      - CERT_DIR_PATH=/app/certs
+      - JWKS_URI=https://gateway:${GATEWAY_PORT:-8080}/.well-known/jwks.json
+      - JWT_PUBLIC_KEY_PATH=/app/certs/jwt/jwt_public.pem
+      - CERT_PASSWORD=${CERT_PASSWORD}
+    volumes:
+      - ../certs:/app/certs:ro
+    healthcheck:
+      test: [ "CMD", "curl", "-k", "--cert", "/app/certs/services/python-service/python-service.crt", "--key", "/app/certs/services/python-service/python-service.key", "-f", "https://localhost:8082/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - transcendence-net
+
+  # == Auto-Generated Service: billing-service ==
+  billing-service:
+    build:
+      context: ../services/billing-service
+      dockerfile: Dockerfile
+    image: transcendence-billing-service:latest
+    container_name: billing-service
+    environment:
+      - PORT=8083
+      - SPRING_APPLICATION_NAME=billing-service
+      - EUREKA_URL=https://eureka-server:${EUREKA_PORT:-8761}/eureka/
+      - CERT_DIR_PATH=/app/certs
+      - JWKS_URI=https://gateway:${GATEWAY_PORT:-8080}/.well-known/jwks.json
+      - JWT_PUBLIC_KEY_PATH=/app/certs/jwt/jwt_public.pem
+      - CERT_PASSWORD=${CERT_PASSWORD}
+    volumes:
+      - ../certs:/app/certs:ro
+    healthcheck:
+      test: [ "CMD", "curl", "-k", "--cert", "/app/certs/services/billing-service/billing-service.p12:${CERT_PASSWORD}", "--cert-type", "P12", "-f", "https://localhost:8083/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - transcendence-net
+  # == Auto-Generated Service: chat-service ==
+  chat-service:
+    build:
+      context: ../services/chat-service
+      dockerfile: Dockerfile
+    image: transcendence-chat-service:latest
+    container_name: chat-service
+    environment:
+      - PORT=8082
+      - SPRING_APPLICATION_NAME=chat-service
+      - EUREKA_URL=https://eureka-server:${EUREKA_PORT:-8761}/eureka/
+      - CERT_DIR_PATH=/app/certs
+      - JWKS_URI=https://gateway:${GATEWAY_PORT:-8080}/.well-known/jwks.json
+      - JWT_PUBLIC_KEY_PATH=/app/certs/jwt/jwt_public.pem
+      - CERT_PASSWORD=${CERT_PASSWORD}
+    volumes:
+      - ../certs:/app/certs:ro
+    healthcheck:
+      test: [ "CMD", "curl", "-k", "--cert", "/app/certs/services/chat-service/chat-service.crt", "--key", "/app/certs/services/chat-service/chat-service.key", "-f", "https://localhost:8082/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - transcendence-net
+# == 7. Bridge Network Connectivity ==
 networks:
   transcendence-net:
-    external: true # Connects seamlessly to the pre-existing infrastructure network
+    external: true
+
+

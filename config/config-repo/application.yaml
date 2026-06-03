@@ -59,10 +59,12 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,gateway
+        include: health,gateway,refresh
   endpoint:
     health:
       show-details: always
+    gateway:
+      enabled: true
 
 logging:
   pattern:
