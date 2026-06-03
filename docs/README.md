@@ -66,7 +66,7 @@ flowchart TB
     EurekaServer ==>|mTLS / HTTPS| ConfigServer
 
     %% Downstream Service Calls (mTLS)
-    Gateway ==>|mTLS / HTTPS (lb://auth-service)| AuthService
+    Gateway ==>|mTLS / HTTPS to auth-service| AuthService
 
     %% Database & Cache Connections
     Gateway -->|Redis Sessions & OAuth State| Redis
