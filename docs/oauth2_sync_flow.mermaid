@@ -1,10 +1,10 @@
 sequenceDiagram
     autonumber
-    participant Client as Client (Vite Browser)
-    participant Gateway as BFF Gateway (Spring Cloud Gateway)
-    participant Provider as OAuth2 Provider (Google / 42)
-    participant Redis as Redis Session Store
-    participant Auth as Auth Service (Spring Boot Backend)
+    participant Client as "Client (Vite Browser)"
+    participant Gateway as "BFF Gateway (Spring Cloud Gateway)"
+    participant Provider as "OAuth2 Provider (Google / 42)"
+    participant Redis as "Redis Session Store"
+    participant Auth as "Auth Service (Spring Boot Backend)"
 
     Client->>Gateway: Click "Login with Google/42"<br>(GET /oauth2/authorization/google)
     Note over Gateway: RedisServerOAuth2AuthorizationRequestRepository

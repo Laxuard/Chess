@@ -160,10 +160,10 @@ To secure downstream microservices, the BFF Gateway translates stateful browser 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Client as Client (Vite Browser)
-    participant Gateway as BFF Gateway (Spring Cloud Gateway)
-    participant Redis as Redis Session Store
-    participant Auth as Auth Service (Spring Boot Backend)
+    participant Client as "Client (Vite Browser)"
+    participant Gateway as "BFF Gateway (Spring Cloud Gateway)"
+    participant Redis as "Redis Session Store"
+    participant Auth as "Auth Service (Spring Boot Backend)"
 
     Client->>Gateway: HTTP Request (GET /api/auth/users) with Cookie: SESSION=xyz
     Note over Gateway: Gateway Interceptor: Eager Cookie check
@@ -218,11 +218,11 @@ The Gateway hosts OAuth2 Client configurations. When a user authenticates via th
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Client as Client (Vite Browser)
-    participant Gateway as BFF Gateway (Spring Cloud Gateway)
-    participant Provider as OAuth2 Provider (Google / 42)
-    participant Redis as Redis Session Store
-    participant Auth as Auth Service (Spring Boot Backend)
+    participant Client as "Client (Vite Browser)"
+    participant Gateway as "BFF Gateway (Spring Cloud Gateway)"
+    participant Provider as "OAuth2 Provider (Google / 42)"
+    participant Redis as "Redis Session Store"
+    participant Auth as "Auth Service (Spring Boot Backend)"
 
     Client->>Gateway: Click "Login with Google/42"<br>(GET /oauth2/authorization/google)
     Note over Gateway: RedisServerOAuth2AuthorizationRequestRepository

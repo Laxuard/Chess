@@ -1,9 +1,9 @@
 sequenceDiagram
     autonumber
-    participant Client as Client (Vite Browser)
-    participant Gateway as BFF Gateway (Spring Cloud Gateway)
-    participant Redis as Redis Session Store
-    participant Auth as Auth Service (Spring Boot Backend)
+    participant Client as "Client (Vite Browser)"
+    participant Gateway as "BFF Gateway (Spring Cloud Gateway)"
+    participant Redis as "Redis Session Store"
+    participant Auth as "Auth Service (Spring Boot Backend)"
 
     Client->>Gateway: HTTP Request (GET /api/auth/users) with Cookie: SESSION=xyz
     Note over Gateway: Gateway Interceptor: Eager Cookie check
