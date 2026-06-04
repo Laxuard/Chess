@@ -44,13 +44,16 @@ DAYS_VALID="${DAYS_VALID:-365}"
 DAYS_CA="${DAYS_CA:-3650}"
 CA_CN="${CA_CN:-TranscendenceCA}"
 
-# Default services generated on first run (edit freely)
-DEFAULT_SERVICES=(
-    "gateway"
-    "auth-service"
-    "config-server"
-    "eureka-server"
-)
+# Discover services dynamically by scanning the services/ folder (excluding frontend and common-core)
+DEFAULT_SERVICES=()
+for d in services/*/; do
+    if [[ -d "$d" ]]; then
+        name=$(basename "$d")
+        if [[ "$name" != "frontend" && "$name" != "common-core" ]]; then
+            DEFAULT_SERVICES+=("$name")
+        fi
+    fi
+done
 
 # ── Colour helpers ─────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GRN='\033[0;32m'; YLW='\033[0;33m'

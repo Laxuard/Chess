@@ -1,12 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Transcendence DevPortal</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
     <style>
         :root {
             --bg-color: #0d0f14;
@@ -32,7 +35,7 @@
 
         body {
             background-color: var(--bg-color);
-            background-image: 
+            background-image:
                 radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.12) 0px, transparent 50%),
                 radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.08) 0px, transparent 50%);
             color: var(--text-color);
@@ -313,9 +316,20 @@
         }
 
         @keyframes pulse {
-            0% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.1); opacity: 0.8; }
-            100% { transform: scale(1); opacity: 1; }
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            50% {
+                transform: scale(1.1);
+                opacity: 0.8;
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
         }
 
         .health-name {
@@ -411,6 +425,7 @@
         }
     </style>
 </head>
+
 <body>
 
     <header>
@@ -426,7 +441,7 @@
             <!-- Dashboard Links Section -->
             <h2 class="section-title">🔌 Active Management Dashboards</h2>
             <div class="dashboard-grid">
-                
+
                 <!-- Eureka Card -->
                 <div class="card secure-card">
                     <div class="card-header">
@@ -460,15 +475,15 @@
                     <a href="http://localhost:6381/" target="_blank" class="btn">Open Commander</a>
                 </div>
 
-                <!-- RabbitMQ Card -->
-                <div class="card">
+                <!-- Kafka UI Card -->
+                <div class="card secure-card">
                     <div class="card-header">
-                        <div class="icon-wrapper">🐇</div>
+                        <div class="icon-wrapper">🪵</div>
                         <span class="badge badge-http">HTTP</span>
                     </div>
-                    <h3>RabbitMQ Management</h3>
-                    <p>Observe message brokers, exchanges, queues, and channel activity.</p>
-                    <a href="http://localhost:15672/" target="_blank" class="btn">Open Console</a>
+                    <h3>Kafka UI Visualizer</h3>
+                    <p>Explore Kafka topics, consumer groups, offsets, and message payloads.</p>
+                    <a href="http://localhost:8086/" target="_blank" class="btn">Open Kafka UI</a>
                 </div>
 
                 <!-- PostgreSQL Card -->
@@ -479,7 +494,7 @@
                     </div>
                     <h3>PostgreSQL Database</h3>
                     <p>Web UI for querying database tables, editing records, and inspecting schemas.</p>
-                    <a href="http://localhost:8082/" target="_blank" class="btn">Open Pgweb</a>
+                    <a href="http://localhost:8085/" target="_blank" class="btn">Open Pgweb</a>
                 </div>
 
             </div>
@@ -499,7 +514,8 @@
                                 <div class="health-endpoint">/config-server/actuator/health</div>
                             </div>
                         </div>
-                        <a href="/config-server/actuator/health" id="config-health-link" target="_blank" class="btn btn-outline">Raw JSON</a>
+                        <a href="/config-server/actuator/health" id="config-health-link" target="_blank"
+                            class="btn btn-outline">Raw JSON</a>
                     </div>
                     <div class="health-item">
                         <div class="health-info">
@@ -512,7 +528,8 @@
                                 <div class="health-endpoint">/eureka-server/actuator/health</div>
                             </div>
                         </div>
-                        <a href="/eureka-server/actuator/health" id="eureka-health-link" target="_blank" class="btn btn-outline">Raw JSON</a>
+                        <a href="/eureka-server/actuator/health" id="eureka-health-link" target="_blank"
+                            class="btn btn-outline">Raw JSON</a>
                     </div>
                     <div class="health-item">
                         <div class="health-info">
@@ -525,7 +542,8 @@
                                 <div class="health-endpoint">/actuator/health</div>
                             </div>
                         </div>
-                        <a href="/actuator/health" id="gateway-health-link" target="_blank" class="btn btn-outline">Raw JSON</a>
+                        <a href="/actuator/health" id="gateway-health-link" target="_blank" class="btn btn-outline">Raw
+                            JSON</a>
                     </div>
                     <div class="health-item">
                         <div class="health-info">
@@ -538,7 +556,22 @@
                                 <div class="health-endpoint">/auth-service/actuator/health</div>
                             </div>
                         </div>
-                        <a href="/auth-service/actuator/health" id="auth-health-link" target="_blank" class="btn btn-outline">Raw JSON</a>
+                        <a href="/auth-service/actuator/health" id="auth-health-link" target="_blank"
+                            class="btn btn-outline">Raw JSON</a>
+                    </div>
+                    <div class="health-item">
+                        <div class="health-info">
+                            <div class="health-indicator" id="social-health"></div>
+                            <div>
+                                <div style="display:flex; align-items:center; gap: 0.5rem;">
+                                    <span class="health-name">Social Service</span>
+                                    <span class="health-status-badge" id="social-health-text">checking</span>
+                                </div>
+                                <div class="health-endpoint">/social-service/actuator/health</div>
+                            </div>
+                        </div>
+                        <a href="/social-service/actuator/health" id="social-health-link" target="_blank"
+                            class="btn btn-outline">Raw JSON</a>
                     </div>
                 </div>
             </div>
@@ -557,22 +590,26 @@
             <h2 class="section-title">⌨️ Developer Quick Console</h2>
             <div class="cli-card">
                 <div class="code-container">
-                    
+
                     <div class="command-block">
                         <div class="command-desc">🚀 Register & Provision New Microservice (Node/Python)</div>
-                        <div class="command-line" id="cmd-register">./scripts/register-service.sh [service-name] [nodejs|python]</div>
+                        <div class="command-line" id="cmd-register">./scripts/register-service.sh [service-name]
+                            [nodejs|python]</div>
                         <button class="copy-btn" onclick="copyText('cmd-register')">📋</button>
                     </div>
 
                     <div class="command-block">
                         <div class="command-desc">🔄 Hot-Reload API Gateway Routing Context</div>
-                        <div class="command-line" id="cmd-refresh">docker exec gateway curl -k -X POST https://localhost:8080/actuator/refresh && docker exec gateway curl -k -X POST https://localhost:8080/actuator/gateway/refresh</div>
+                        <div class="command-line" id="cmd-refresh">docker exec gateway curl -k -X POST
+                            https://localhost:8080/actuator/refresh && docker exec gateway curl -k -X POST
+                            https://localhost:8080/actuator/gateway/refresh</div>
                         <button class="copy-btn" onclick="copyText('cmd-refresh')">📋</button>
                     </div>
 
                     <div class="command-block">
                         <div class="command-desc">🔑 Import Client Certificate to Linux NSS (Brave/Chrome)</div>
-                        <div class="command-line" id="cmd-cert">pk12util -d sql:$HOME/.pki/nssdb -i certs/services/gateway/gateway.p12 -W password</div>
+                        <div class="command-line" id="cmd-cert">pk12util -d sql:$HOME/.pki/nssdb -i
+                            certs/services/gateway/gateway.p12 -W password</div>
                         <button class="copy-btn" onclick="copyText('cmd-cert')">📋</button>
                     </div>
 
@@ -584,7 +621,9 @@
 
                     <div class="command-block">
                         <div class="command-desc">📝 Query Registered Apps from Eureka Registry</div>
-                        <div class="command-line" id="cmd-query">curl -k --cert certs/services/gateway/gateway.crt --key certs/services/gateway/gateway.key -H "Accept: application/json" https://localhost:8761/eureka/apps</div>
+                        <div class="command-line" id="cmd-query">curl -k --cert certs/services/gateway/gateway.crt --key
+                            certs/services/gateway/gateway.key -H "Accept: application/json"
+                            https://localhost:8761/eureka/apps</div>
                         <button class="copy-btn" onclick="copyText('cmd-query')">📋</button>
                     </div>
 
@@ -610,7 +649,8 @@
             { id: 'config-health', url: '/config-server/actuator/health' },
             { id: 'eureka-health', url: '/eureka-server/actuator/health' },
             { id: 'gateway-health', url: '/actuator/health' },
-            { id: 'auth-health', url: '/auth-service/actuator/health' }
+            { id: 'auth-health', url: '/auth-service/actuator/health' },
+            { id: 'social-health', url: '/social-service/actuator/health' }
         ];
 
         // Adaptive URLs if page is opened as static file: file:///...
@@ -620,25 +660,27 @@
             services[1].url = 'https://localhost:8761/actuator/health';
             services[2].url = 'https://localhost:8080/actuator/health';
             services[3].url = 'https://localhost:8080/auth-service/actuator/health';
-            
+            services[4].url = 'https://localhost:8080/social-service/actuator/health';
+
             // Adjust raw JSON links to be absolute as well
             document.getElementById('config-health-link').href = 'https://localhost:8888/actuator/health';
             document.getElementById('eureka-health-link').href = 'https://localhost:8761/actuator/health';
             document.getElementById('gateway-health-link').href = 'https://localhost:8080/actuator/health';
             document.getElementById('auth-health-link').href = 'https://localhost:8080/auth-service/actuator/health';
+            document.getElementById('social-health-link').href = 'https://localhost:8080/social-service/actuator/health';
         }
 
         async function checkHealth(service) {
             const indicator = document.getElementById(service.id);
             const badge = document.getElementById(service.id + '-text');
-            
+
             try {
-                const response = await fetch(service.url, { 
+                const response = await fetch(service.url, {
                     method: 'GET',
                     mode: 'cors',
                     credentials: 'omit'
                 });
-                
+
                 if (response.ok) {
                     const data = await response.json();
                     if (data.status === 'UP') {
@@ -675,27 +717,27 @@
                 const response = await fetch(registryUrl, {
                     headers: { 'Accept': 'application/json' }
                 });
-                
+
                 if (response.ok) {
                     const data = await response.json();
                     const appsList = data.applications.application || [];
                     const apps = Array.isArray(appsList) ? appsList : [appsList];
-                    
+
                     if (apps.length === 0 || (apps.length === 1 && !apps[0])) {
                         container.innerHTML = '<div style="color:var(--text-muted); font-size:0.95rem; text-align:center; padding:1rem 0;">No active microservices registered in Eureka.</div>';
                         return;
                     }
-                    
+
                     let html = '';
                     apps.forEach(app => {
                         const instancesList = app.instance || [];
                         const instances = Array.isArray(instancesList) ? instancesList : [instancesList];
-                        
+
                         instances.forEach(inst => {
                             const portVal = inst.port && inst.port['$'] ? inst.port['$'] : 'unknown';
-                            const serviceColor = app.name.includes('GATEWAY') ? '#6366f1' : 
-                                                 app.name.includes('AUTH') ? '#a855f7' : '#10b981';
-                            
+                            const serviceColor = app.name.includes('GATEWAY') ? '#6366f1' :
+                                app.name.includes('AUTH') ? '#a855f7' : '#10b981';
+
                             html += `
                                 <div style="display:flex; justify-content:space-between; align-items:center; padding:0.75rem 1rem; background:rgba(255,255,255,0.02); border:1px solid var(--card-border); border-radius:10px;">
                                     <div>
@@ -728,4 +770,5 @@
         setInterval(pollAll, 5000);
     </script>
 </body>
+
 </html>

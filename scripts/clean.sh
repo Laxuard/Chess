@@ -28,7 +28,14 @@ if command -v docker >/dev/null 2>&1; then
     fi
     # Force remove any residual/conflicting containers by name to prevent project-rename conflicts
     info "Force removing conflicting containers by name..."
-    docker rm -f postgres-db redis-container redis-commander rabbitmq config-server eureka-server auth-service gateway >/dev/null 2>&1 || true
+    infra_containers=("postgres-db" "pgweb" "redis-container" "redis-commander" "kafka" "kafka-ui")
+    app_containers=()
+    for d in services/*/; do
+        if [[ -d "$d" ]]; then
+            app_containers+=("$(basename "$d")")
+        fi
+    done
+    docker rm -f "${infra_containers[@]}" "${app_containers[@]}" >/dev/null 2>&1 || true
 else
     warn "Docker command not found — skipping container teardown."
 fi

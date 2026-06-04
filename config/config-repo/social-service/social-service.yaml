@@ -1,0 +1,26 @@
+# ==========================================
+# AUTH SERVICE CORE BASE CONFIGURATION
+# ==========================================
+
+server:
+  forward-headers-strategy: framework
+
+spring:
+  # == 1. Database Driver & Schema Config ==
+  datasource:
+    username: "${DB_USER}"
+    password: "${DB_PASSWORD}"
+    driver-class-name: org.postgresql.Driver
+  
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+# ==========================================
+# OPENAPI / SWAGGER DOCUMENTATION CONFIGURATION
+# ==========================================
+springdoc:
+  server-url: "https://localhost:${GATEWAY_PORT:8080}/api/social"

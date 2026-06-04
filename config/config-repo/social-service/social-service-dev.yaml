@@ -1,0 +1,13 @@
+# ==========================================
+# AUTH SERVICE DEVELOPMENT OVERRIDES
+# ==========================================
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:${POSTGRES_PORT}/transcendence_social
+  
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: "https://localhost:${GATEWAY_PORT:8443}/.well-known/jwks.json"

@@ -3,7 +3,7 @@
 # ==========================================
 
 server:
-  port: ${EUREKA_PORT}
+  port: 8761
   ssl:
     client-auth: want # Allow browsers to view the UI dashboard easily without requiring an mTLS certificate
 

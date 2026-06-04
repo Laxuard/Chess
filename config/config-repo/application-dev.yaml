@@ -1,6 +1,9 @@
 # ==========================================
 #  Application Dev Configuration
 # ==========================================
+# Use dynamic random ports locally to prevent port conflict issues
+server:
+  port: 0
 
 spring:
   ssl:
@@ -8,16 +11,16 @@ spring:
       jks:
         microservice-bundle:
           keystore:
-            location: "file:${CERT_DIR_PATH}/services/${spring.application.name}/${spring.application.name}.p12"
+             location: "file:${CERT_DIR_PATH}/services/${spring.application.name}/${spring.application.name}.p12"
           truststore:
-            location: "file:${CERT_DIR_PATH}/truststore/truststore.p12"
+             location: "file:${CERT_DIR_PATH}/truststore/truststore.p12"
 
 eureka:
   instance:
     hostname: localhost
   client:
     service-url:
-      defaultZone: https://localhost:${EUREKA_PORT}/eureka/
+      defaultZone: https://localhost:8761/eureka/
     tls:
       key-store: "file:${CERT_DIR_PATH}/services/${spring.application.name}/${spring.application.name}.p12"
       trust-store: "file:${CERT_DIR_PATH}/truststore/truststore.p12"

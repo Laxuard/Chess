@@ -14,25 +14,30 @@ flowchart TB
         subgraph Exposed_Ports ["Port Mappings to Host"]
             GatewayPort["Gateway Port<br>:8080 (HTTPS)"]:::public
             DbPort["Postgres Port<br>:5432 (TCP)"]:::infra
-            RedisPort["Redis Port<br>:6379 (TCP)"]:::infra
+            RedisPort["Redis Port<br>:6380 (TCP)"]:::infra
             RedisCommanderPort["Redis Commander Port<br>:6381 (HTTP)"]:::infra
-            RabbitPort["RabbitMQ AMQP/UI Ports<br>:5672 / :15672"]:::infra
+            KafkaPort["Kafka Port<br>:9092 (TCP)"]:::infra
+            PgwebPort["Pgweb Port<br>:8085 (HTTP)"]:::infra
+            KafkaUiPort["Kafka UI Port<br>:8086 (HTTP)"]:::infra
         end
 
         subgraph transcendence_net ["transcendence-net (Docker Bridge Network)"]
             %% Public Entrypoint
-            Gateway["Gateway Service (BFF)<br>Spring Cloud Gateway<br>(https://gateway:8080)"]:::public
+            Gateway["Gateway Service (BFF)<br>Spring Cloud Gateway<br>(https://gateway:8443)"]:::public
 
             %% Internal Microservices
-            AuthService["Auth Service<br>Spring Boot / Security<br>(https://auth-service:8081)"]:::internal
+            AuthService["Auth Service<br>Spring Boot / Security<br>(https://auth-service:8443)"]:::internal
+            SocialService["Social Service<br>Spring Boot Backend<br>(https://social-service:8443)"]:::internal
             EurekaServer["Eureka Registry Server<br>Spring Cloud Eureka<br>(https://eureka-server:8761)"]:::internal
             ConfigServer["Config Server<br>Spring Cloud Config<br>(https://config-server:8888)"]:::internal
 
             %% Infrastructure & Databases
             Postgres["PostgreSQL Database<br>(postgres-db:5432)"]:::db
             Redis["Redis Cache & Session Store<br>(redis-container:6379)"]:::db
-            RabbitMQ["RabbitMQ Broker<br>(rabbitmq:5672)"]:::db
+            Kafka["Kafka Broker<br>(kafka:9092)"]:::db
+            Pgweb["Pgweb (DB GUI)<br>(pgweb:8081)"]:::infra
             RedisCommander["Redis Commander (Admin GUI)<br>(redis-commander:8081)"]:::infra
+            KafkaUi["Kafka UI (Admin GUI)<br>(kafka-ui:8080)"]:::infra
         end
         
         ConfigRepo["Local Config Repo<br>(./config-repo)"]:::infra
@@ -48,26 +53,34 @@ flowchart TB
     %% Service Discovery Registration
     Gateway -.->|"Register / Locate"| EurekaServer
     AuthService -.->|"Register / Locate"| EurekaServer
+    SocialService -.->|"Register / Locate"| EurekaServer
 
     %% Config retrieval (mTLS)
     Gateway ==>|"mTLS / HTTPS"| ConfigServer
     AuthService ==>|"mTLS / HTTPS"| ConfigServer
+    SocialService ==>|"mTLS / HTTPS"| ConfigServer
     EurekaServer ==>|"mTLS / HTTPS"| ConfigServer
 
     %% Downstream Service Calls (mTLS)
     Gateway ==>|"mTLS / HTTPS (lb://auth-service)"| AuthService
+    Gateway ==>|"mTLS / HTTPS (lb://social-service)"| SocialService
 
     %% Database & Cache Connections
     Gateway -->|"Redis Sessions & OAuth State"| Redis
     AuthService -->|"User Credentials & DB"| Postgres
     AuthService -->|"Redis Sessions"| Redis
+    SocialService -->|"Social & DB"| Postgres
     RedisCommander -->|"Admin GUI Monitoring"| Redis
+    KafkaUi -->|"Monitors Queue State"| Kafka
+    Postgres -.-> Pgweb
     
     %% Port exposures
     Postgres -.-> DbPort
     Redis -.-> RedisPort
     RedisCommander -.-> RedisCommanderPort
-    RabbitMQ -.-> RabbitPort
+    Kafka -.-> KafkaPort
+    Pgweb -.-> PgwebPort
+    KafkaUi -.-> KafkaUiPort
 
     %% Legend
     style External_Network fill:#e0f2fe,stroke:#0284c7,stroke-width:2px;

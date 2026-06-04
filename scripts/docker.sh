@@ -24,7 +24,7 @@ usage() {
     echo "Commands:"
     echo "  up             Start the entire cluster (infra first, then apps)"
     echo "  down           Stop the entire cluster and remove volumes"
-    echo "  infra          Start only the infrastructure stack (db, redis, rabbitmq)"
+    echo "  infra          Start only the infrastructure stack (db, redis, kafka)"
     echo "  apps           Start only the application microservices"
     echo "  restart <svc>  Restart and rebuild a specific microservice container"
     echo "  logs [svc]     Tail logs (for all containers or a specific one)"
@@ -50,7 +50,14 @@ check_env_symlink() {
 
 remove_conflicts() {
     info "Purging potential container name conflicts..."
-    docker rm -f postgres-db redis-container redis-commander rabbitmq pgweb config-server eureka-server auth-service gateway >/dev/null 2>&1 || true
+    local infra_containers=("postgres-db" "pgweb" "redis-container" "redis-commander" "kafka" "kafka-ui")
+    local app_containers=()
+    for d in services/*/; do
+        if [[ -d "$d" ]]; then
+            app_containers+=("$(basename "$d")")
+        fi
+    done
+    docker rm -f "${infra_containers[@]}" "${app_containers[@]}" >/dev/null 2>&1 || true
 }
 
 wait_for_infra() {
@@ -110,7 +117,7 @@ case "${1:-}" in
         
     apps)
         check_env_symlink
-        docker rm -f config-server eureka-server auth-service gateway >/dev/null 2>&1 || true
+        docker rm -f config-server eureka-server auth-service gateway social-service >/dev/null 2>&1 || true
         step "Starting Applications Stack Only"
         docker compose -f "$APPS_COMPOSE" up -d --build
         ;;

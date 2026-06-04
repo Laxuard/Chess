@@ -1,6 +1,6 @@
 spring:
   config:
-    import: "optional:configserver:https://localhost:${CONFIG_SERVER_PORT}"
+    import: "optional:configserver:https://localhost:${CONFIG_SERVER_PORT:8888}"
   cloud:
     config:
       tls:

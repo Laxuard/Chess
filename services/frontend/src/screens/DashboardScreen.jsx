@@ -6,6 +6,9 @@ import { getUsers, getMfaSetup, confirmMfaSetup, unlinkOAuth2Provider, redirectT
 import { QRCodeSVG } from 'qrcode.react';
 
 export default function DashboardScreen() {
+  const gatewayPort = typeof __GATEWAY_PORT__ !== 'undefined' ? __GATEWAY_PORT__ : '8080';
+  const gatewayOrigin = window.location.port === '5173' ? `https://localhost:${gatewayPort}` : window.location.origin;
+
   const navigate = useNavigate();
   const { logout } = useAuth();
 
@@ -429,7 +432,7 @@ export default function DashboardScreen() {
                     </h3>
                     <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: '12px 16px', background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
                       <span className="text-label">Active Cookie Domain</span>
-                      <span className="text-mono" style={{ color: 'var(--teal-glow)', fontSize: '0.85rem' }}>https://localhost:8080</span>
+                      <span className="text-mono" style={{ color: 'var(--teal-glow)', fontSize: '0.85rem' }}>{gatewayOrigin}</span>
 
                       <span className="text-label">Encryption Level</span>
                       <span className="text-mono" style={{ fontSize: '0.85rem' }}>Lightweight Transit State Representation (JWT)</span>

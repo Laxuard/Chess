@@ -10,7 +10,7 @@ Before writing code, it is important to understand the three pillars of security
 
 ```mermaid
 flowchart TD
-    Client["Client (Browser)"] ==>|"1. Cookie Session"| Gateway["BFF Gateway<br>(https://gateway:8080)"]
+    Client["Client (Browser)"] ==>|"1. Cookie Session"| Gateway["BFF Gateway<br>(https://localhost:8080)"]
     
     subgraph internal_network ["Secure Internal Network (mTLS & Eureka)"]
         Gateway ==>|"2. Transit JWT over mTLS"| TargetService["Target Microservice<br>(HTTPS clientAuth=need)"]
@@ -19,7 +19,7 @@ flowchart TD
     end
 ```
 
-1. **Backend-For-Frontend (BFF) Gateway**: The client browser *only* talks to the Gateway (`https://gateway:8080`). The Gateway strips the stateful `SESSION` cookie, converts it into a signed **Transit JWT**, and forwards the request downstream as `Authorization: Bearer <transitJwt>`.
+1. **Backend-For-Frontend (BFF) Gateway**: The client browser *only* talks to the Gateway (`https://localhost:8080`). The Gateway strips the stateful `SESSION` cookie, converts it into a signed **Transit JWT**, and forwards the request downstream as `Authorization: Bearer <transitJwt>`.
 2. **Mutual TLS (mTLS)**: All service-to-service communication requires mTLS. Incoming requests are authenticated against our internal **Root CA**, and outgoing requests must present the service's certificate.
 3. **Netflix Eureka Discovery**: Services do not hardcode downstream URLs. They register themselves securely with Eureka, and the Gateway routes traffic dynamically using `lb://<service-name>`.
 
@@ -101,7 +101,7 @@ For Java developers, Spring Boot handles the infrastructure seamlessly. Ensure t
 
 ```yaml
 server:
-  port: ${MY_SERVICE_PORT:8082}
+  port: 8443 # Standard internal container port
   ssl:
     enabled: true
     client-auth: need
@@ -124,7 +124,7 @@ import ssl
 uvicorn.run(
     "app:app",
     host="0.0.0.0",
-    port=8082,
+    port=8443,
     ssl_keyfile="/app/certs/services/my-service/my-service.key",
     ssl_certfile="/app/certs/services/my-service/my-service.crt",
     ssl_ca_certs="/app/certs/rootCA/rootCA.crt",
@@ -146,7 +146,7 @@ const options = {
     rejectUnauthorized: true   // Verify client certificate matches Root CA
 };
 
-https.createServer(options, app).listen(8083);
+https.createServer(options, app).listen(8443);
 ```
 
 ---
@@ -168,17 +168,17 @@ You must explicitly declare the port as secure and mark the default port as disa
 ```json
 {
   "instance": {
-    "instanceId": "my-service:my-service:8082",
+    "instanceId": "my-service:my-service:8443",
     "hostName": "my-service",
     "app": "MY-SERVICE",
     "ipAddr": "my-service",
     "status": "UP",
     "port": {
-      "$": 8082,
+      "$": 8443,
       "@enabled": "false"
     },
     "securePort": {
-      "$": 8082,
+      "$": 8443,
       "@enabled": "true"
     },
     "vipAddress": "my-service",
@@ -216,7 +216,7 @@ A valid Transit JWT contains the following payload claims:
 
 ### 2. Validation Methods
 Downstream services can validate the token signature in two ways:
-* **Dynamic JWKS (Recommended for Prod)**: Fetch the Gateway's public keys from `https://gateway:8080/.well-known/jwks.json` over mTLS. Downstream services cache these keys (Cache-Control max-age is set to 24 hours).
+* **Dynamic JWKS (Recommended for Prod)**: Fetch the Gateway's public keys from `https://gateway:8443/.well-known/jwks.json` over mTLS. Downstream services cache these keys (Cache-Control max-age is set to 24 hours).
 * **Static Public Key (Recommended for Local Dev)**: Mount the Gateway's public key file `certs/jwt/jwt_public.pem` into the service and load it directly. This bypasses the need for outbound mTLS calls to the gateway.
 
 > [!IMPORTANT]
@@ -268,18 +268,18 @@ Once the code and route are configured, add the service definition to the applic
     image: transcendence-my-service:latest
     container_name: my-service
     environment:
-      - PORT=8082
+      - PORT=8443
       - SPRING_APPLICATION_NAME=my-service
       - EUREKA_URL=https://eureka-server:8761/eureka/
       - CERT_DIR_PATH=/app/certs
-      - JWKS_URI=https://gateway:8080/.well-known/jwks.json
+      - JWKS_URI=https://gateway:8443/.well-known/jwks.json
       - JWT_PUBLIC_KEY_PATH=/app/certs/jwt/jwt_public.pem
       - CERT_PASSWORD=${CERT_PASSWORD}
     volumes:
       - ../certs:/app/certs:ro # Read-only certificates mount
     healthcheck:
       # Use mTLS curl to monitor application health status
-      test: [ "CMD", "curl", "-k", "--cert", "/app/certs/services/my-service/my-service.crt", "--key", "/app/certs/services/my-service/my-service.key", "-f", "https://localhost:8082/health" ]
+      test: [ "CMD", "curl", "-k", "--cert", "/app/certs/services/my-service/my-service.crt", "--key", "/app/certs/services/my-service/my-service.key", "-f", "https://localhost:8443/health" ]
       interval: 10s
       timeout: 5s
       retries: 5

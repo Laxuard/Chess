@@ -1,0 +1,13 @@
+# ==========================================
+# AUTH SERVICE DOCKER OVERRIDES
+# ==========================================
+
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres-db:5432/transcendence_social
+  
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: "https://gateway:8443/.well-known/jwks.json"

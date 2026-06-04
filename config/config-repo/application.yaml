@@ -26,6 +26,7 @@ spring:
 
 # == 2. Inbound Server Configuration (Uses Modern Bundle) ==
 server:
+  port: 8443
   ssl:
     enabled: true
     client-auth: need

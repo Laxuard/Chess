@@ -3,7 +3,7 @@
 # ==========================================
 
 server:
-  port: ${GATEWAY_PORT}
+  port: 8443
   ssl:
     client-auth: none
 
@@ -108,6 +108,26 @@ spring:
                 - SessionToJwt
                 - TwoFactorCheck
 
+            # OpenAPI Spec Bypass for Social Service
+            - id: social-service-openapi-bypass
+              uri: lb://social-service
+              order: 5
+              predicates:
+                - Path=/api/social/v3/api-docs/**, /api/social/v3/api-docs
+              filters:
+                - StripPrefix=2
+
+            # Secure Route for Social Service (Enforces Full Authentication & 2FA Check)
+            - id: social-service-secure
+              uri: lb://social-service
+              order: 6
+              predicates:
+                - Path=/api/social/**
+              filters:
+                - StripPrefix=2
+                - SessionToJwt
+                - TwoFactorCheck
+
 # ==========================================
 # OPENAPI / SWAGGER AGGREGATION CONFIGURATION
 # ==========================================
@@ -117,6 +137,8 @@ springdoc:
     urls:
       - name: "Authentication Service"
         url: "/api/auth/v3/api-docs"
+      - name: "Social Service"
+        url: "/api/social/v3/api-docs"
 
 # ==========================================
 # APPLICATION CORE SECURITY & CORS CONFIG

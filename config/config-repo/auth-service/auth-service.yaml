@@ -3,7 +3,6 @@
 # ==========================================
 
 server:
-  port: ${AUTH_SERVICE_PORT}
   forward-headers-strategy: framework
 
 spring:
@@ -37,4 +36,4 @@ spring:
 # OPENAPI / SWAGGER DOCUMENTATION CONFIGURATION
 # ==========================================
 springdoc:
-  server-url: "https://localhost:${GATEWAY_PORT}/api/auth"
+  server-url: "https://localhost:${GATEWAY_PORT:8080}/api/auth"

@@ -17,7 +17,7 @@ eureka:
     hostname: ${spring.application.name}
   client:
     service-url:
-      defaultZone: https://eureka-server:${EUREKA_PORT}/eureka/
+      defaultZone: https://eureka-server:8761/eureka/
     tls:
       key-store: "file:/app/certs/services/${spring.application.name}/${spring.application.name}.p12"
       trust-store: "file:/app/certs/truststore/truststore.p12"

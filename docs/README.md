@@ -28,25 +28,30 @@ flowchart TB
         subgraph Exposed_Ports ["Port Mappings to Host"]
             GatewayPort["Gateway Port<br>:8080 (HTTPS)"]:::public
             DbPort["Postgres Port<br>:5432 (TCP)"]:::infra
-            RedisPort["Redis Port<br>:6379 (TCP)"]:::infra
+            RedisPort["Redis Port<br>:6380 (TCP)"]:::infra
             RedisCommanderPort["Redis Commander Port<br>:6381 (HTTP)"]:::infra
-            RabbitPort["RabbitMQ AMQP/UI Ports<br>:5672 / :15672"]:::infra
+            KafkaPort["Kafka Port<br>:9092 (TCP)"]:::infra
+            PgwebPort["Pgweb Port<br>:8085 (HTTP)"]:::infra
+            KafkaUiPort["Kafka UI Port<br>:8086 (HTTP)"]:::infra
         end
 
         subgraph transcendence_net ["transcendence-net (Docker Bridge Network)"]
             %% Public Entrypoint
-            Gateway["Gateway Service (BFF)<br>Spring Cloud Gateway<br>(https://gateway:8080)"]:::public
+            Gateway["Gateway Service (BFF)<br>Spring Cloud Gateway<br>(https://gateway:8443)"]:::public
 
             %% Internal Microservices
-            AuthService["Auth Service<br>Spring Boot / Security<br>(https://auth-service:8081)"]:::internal
+            AuthService["Auth Service<br>Spring Boot / Security<br>(https://auth-service:8443)"]:::internal
+            SocialService["Social Service<br>Spring Boot Backend<br>(https://social-service:8443)"]:::internal
             EurekaServer["Eureka Registry Server<br>Spring Cloud Eureka<br>(https://eureka-server:8761)"]:::internal
             ConfigServer["Config Server<br>Spring Cloud Config<br>(https://config-server:8888)"]:::internal
 
             %% Infrastructure & Databases
             Postgres["PostgreSQL Database<br>(postgres-db:5432)"]:::db
             Redis["Redis Cache & Session Store<br>(redis-container:6379)"]:::db
-            RabbitMQ["RabbitMQ Broker<br>(rabbitmq:5672)"]:::db
+            Kafka["Kafka Broker<br>(kafka:9092)"]:::db
+            Pgweb["Pgweb (DB GUI)<br>(pgweb:8081)"]:::infra
             RedisCommander["Redis Commander (Admin GUI)<br>(redis-commander:8081)"]:::infra
+            KafkaUi["Kafka UI (Admin GUI)<br>(kafka-ui:8080)"]:::infra
         end
         
         ConfigRepo["Local Config Repo<br>(./config-repo)"]:::infra
@@ -62,26 +67,34 @@ flowchart TB
     %% Service Discovery Registration
     Gateway -.->|"Register / Locate"| EurekaServer
     AuthService -.->|"Register / Locate"| EurekaServer
+    SocialService -.->|"Register / Locate"| EurekaServer
 
     %% Config retrieval (mTLS)
     Gateway ==>|"mTLS / HTTPS"| ConfigServer
     AuthService ==>|"mTLS / HTTPS"| ConfigServer
+    SocialService ==>|"mTLS / HTTPS"| ConfigServer
     EurekaServer ==>|"mTLS / HTTPS"| ConfigServer
 
     %% Downstream Service Calls (mTLS)
     Gateway ==>|"mTLS / HTTPS (lb://auth-service)"| AuthService
+    Gateway ==>|"mTLS / HTTPS (lb://social-service)"| SocialService
 
     %% Database & Cache Connections
     Gateway -->|"Redis Sessions & OAuth State"| Redis
     AuthService -->|"User Credentials & DB"| Postgres
     AuthService -->|"Redis Sessions"| Redis
+    SocialService -->|"Social & DB"| Postgres
     RedisCommander -->|"Admin GUI Monitoring"| Redis
+    KafkaUi -->|"Monitors Queue State"| Kafka
+    Postgres -.-> Pgweb
     
     %% Port exposures
     Postgres -.-> DbPort
     Redis -.-> RedisPort
     RedisCommander -.-> RedisCommanderPort
-    RabbitMQ -.-> RabbitPort
+    Kafka -.-> KafkaPort
+    Pgweb -.-> PgwebPort
+    KafkaUi -.-> KafkaUiPort
 
     %% Legend
     style External_Network fill:#e0f2fe,stroke:#0284c7,stroke-width:2px;
@@ -104,7 +117,7 @@ The project has been organized into logical directories to ensure scalability, e
 ├── config/                     # Configuration configurations & directories
 │   └── config-repo/            # Local Git-managed properties repository (Spring Config Server backend)
 ├── docker/                     # Docker Compose deployment manifests
-│   ├── docker-compose.yml      # Base infrastructure stack (DB, Redis, RabbitMQ)
+│   ├── docker-compose.yml      # Base infrastructure stack (DB, Redis, Kafka)
 │   ├── docker-compose.apps.yml # Applications and microservices stack
 │   └── env.example             # Example environment file template
 ├── docs/                       # Architectural documentation and diagrams
@@ -134,15 +147,17 @@ To avoid port conflicts and ensure secure boundaries, only the **Gateway BFF** a
 
 | Service Name | Protocol / Scheme | Internal Container Port | Host Bind Port | Network Scope | Purpose / Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **BFF Gateway** | HTTPS / WSS | `8080` | `8080` | **Exposed (Public)** | External entrypoint for the Frontend client |
-| **Auth Service** | HTTPS | `8081` | *None* | **Internal Only** | Handles authentication requests via service discovery |
-| **Eureka Server** | HTTPS | `8761` | *None* | **Internal Only** | Metadata discovery server registry |
+| **BFF Gateway** | HTTPS / WSS | `8443` | `8080` | **Exposed (Public)** | External entrypoint for the Frontend client |
+| **Auth Service** | HTTPS | `8443` | *None* | **Internal Only** | Handles authentication requests via service discovery |
+| **Social Service** | HTTPS | `8443` | *None* | **Internal Only** | Handles social network, relationships, and profiles |
+| **Eureka Server** | HTTPS | `8761` | `8761` | **Internal Only** | Metadata discovery server registry (also exposed to host for local dev) |
 | **Config Server** | HTTPS | `8888` | *None* | **Internal Only** | Centralized bootstrap configurations provider |
 | **PostgreSQL Database** | TCP / JDBC | `5432` | `5432` | Host Access Bind | Storage engine containing user databases |
 | **Redis Cache** | TCP | `6379` | `6380` | Host Access Bind | Caching server and shared session store |
 | **Redis Commander** | HTTP | `8081` | `6381` | **Exposed (Public)** | Web administrative GUI to inspect Redis cache sessions |
-| **RabbitMQ Core** | AMQP | `5672` | `5672` | Host Access Bind | Internal asynchronous message broker |
-| **RabbitMQ UI** | HTTP | `15672` | `15672` | **Exposed (Public)** | Web administration dashboard for RabbitMQ |
+| **Pgweb DB GUI** | HTTP | `8081` | `8085` | **Exposed (Public)** | Web administrative GUI to inspect PostgreSQL databases |
+| **Kafka Broker** | TCP | `9092` | `9092` | Host Access Bind | Distributed event streaming broker |
+| **Kafka UI** | HTTP | `8080` | `8086` | **Exposed (Public)** | Web administrative GUI to inspect Kafka topics and messages |
 | **Vite Dev Server** | HTTP | `5173` | `5173` | **Exposed (Public)** | Local developer server running host-side |
 
 ---
@@ -443,7 +458,7 @@ Performs project compile validations:
 Manages the Docker containers stack using Docker Compose and handles startup dependencies natively:
 - **`./scripts/docker.sh up`**: Boots infrastructure, polls `postgres-db` and `redis-container` status until healthy, and then builds/starts the Java apps.
 - **`./scripts/docker.sh down`**: Tears down the containers and purges Docker volumes.
-- **`./scripts/docker.sh infra`**: Starts only PostgreSQL, Redis, Redis Commander, and RabbitMQ.
+- **`./scripts/docker.sh infra`**: Starts only PostgreSQL, Redis, Redis Commander, Kafka, and Pgweb.
 - **`./scripts/docker.sh apps`**: Starts only the Java microservices.
 - **`./scripts/docker.sh restart <service>`**: Rebuilds and restarts a specific container (e.g. `./scripts/docker.sh restart auth-service`).
 - **`./scripts/docker.sh logs [service]`**: Tails Docker logging outputs.

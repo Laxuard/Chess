@@ -2,7 +2,8 @@ package com.ft_transcendence.auth.security.config;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
-import com.ft_transcendence.auth.core.filter.TraceIdFilter;
+import com.ft_transcendence.common.filter.TraceIdFilter;
+import com.ft_transcendence.common.security.ProblemDetailAuthenticationEntryPoint;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.savedrequest.NullRequestCache;

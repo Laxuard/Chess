@@ -16,10 +16,27 @@ step()  { echo -e "\n${BLD}${CYN}──── $* ────${RST}"; }
 
 step "Starting Project-Wide Compilation & Build"
 
-# 1. Build all backend services
+# 1. Build common-core first (if it exists) to satisfy dependencies of other microservices
+if [[ -d "services/common-core" && -f "services/common-core/pom.xml" ]]; then
+    step "Building Core Library Dependency: common-core"
+    if [[ -x "services/common-core/mvnw" ]]; then
+        info "[common-core] Running './mvnw clean install -DskipTests'..."
+        "services/common-core/mvnw" -f "services/common-core/pom.xml" clean install -DskipTests --no-transfer-progress
+    elif command -v mvn >/dev/null 2>&1; then
+        info "[common-core] Running 'mvn clean install -DskipTests'..."
+        mvn -f "services/common-core/pom.xml" clean install -DskipTests --no-transfer-progress
+    else
+        error "[common-core] Neither ./mvnw nor global mvn command was found. Cannot build!"
+        exit 1
+    fi
+    ok "[common-core] Shared library installed successfully!"
+fi
+
+# 2. Build all other backend services
 for svc_dir in services/*/; do
     [[ -d "$svc_dir" ]] || continue
     name=$(basename "$svc_dir")
+    [[ "$name" != "common-core" ]] || continue
     
     if [[ -f "${svc_dir}pom.xml" ]]; then
         step "Building Backend: $name"
@@ -48,8 +65,11 @@ if [[ -d "services/frontend" ]]; then
             npm install --no-audit --no-fund
         fi
         info "[frontend] Compiling production build (npm run build)..."
-        npm run build
-        ok "[frontend] Production build compiled successfully!"
+        if npm run build; then
+            ok "[frontend] Production build compiled successfully!"
+        else
+            warn "[frontend] Production build failed (node version $(node -v) might be outdated). Skipping..."
+        fi
     else
         warn "[frontend] Node/NPM not found — skipping frontend build compilation."
     fi
