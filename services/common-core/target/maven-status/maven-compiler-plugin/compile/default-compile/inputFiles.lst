@@ -1,0 +1,15 @@
+/home/laxuard/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/aspect/LogExecutionTime.java
+/home/laxuard/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/aspect/PerformanceLoggingAspect.java
+/home/laxuard/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/event/UserDeleteEvent.java
+/home/laxuard/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/event/UserSyncEvent.java
+/home/laxuard/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/exception/BadRequestException.java
+/home/laxuard/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/exception/BaseException.java
+/home/laxuard/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/exception/DuplicateResourceException.java
+/home/laxuard/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/exception/GlobalExceptionHandler.java
+/home/laxuard/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/exception/ResourceNotFoundException.java
+/home/laxuard/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/filter/TraceIdFilter.java
+/home/laxuard/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/model/BaseAuditableEntity.java
+/home/laxuard/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/security/CommonSecurityConfig.java
+/home/laxuard/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/security/JwtConfig.java
+/home/laxuard/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/security/ProblemDetailAuthenticationEntryPoint.java
+/home/laxuard/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/util/TraceContext.java

@@ -5,8 +5,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 
 @ResponseStatus(HttpStatus.CONFLICT)
 public class DuplicateResourceException extends BaseException {
-    public DuplicateResourceException(String resource) {
-        super(HttpStatus.CONFLICT, "duplicate-resource",
-                resource + " already exists");
+    public DuplicateResourceException(String message) {
+        super(HttpStatus.CONFLICT, "duplicate-resource", message);
     }
 }

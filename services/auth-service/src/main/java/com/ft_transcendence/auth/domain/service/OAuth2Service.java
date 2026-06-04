@@ -33,28 +33,42 @@ public class OAuth2Service {
     @Transactional
     public OAuth2UserSummary syncUser(OAuth2SyncRequest request) {
         return userIdentityRepository.findByProviderAndProviderId(request.provider(), request.providerId())
-
                 .map(identity -> {
-
                     identity.setLastLoginAt(LocalDateTime.now());
-
                     UserAuth user = identity.getUser();
-                    
-                    boolean hasDefaultPfp = "/assets/avatars/default-placeholder.png".equals(user.getAvatarUrl());
-                    
-                    boolean currentlyUsingSocialPfp = user.getAvatarUrl().contains("googleusercontent.com") 
-                                                    || user.getAvatarUrl().contains("intra.42.fr");
-                                                    
-                    boolean pfpHasChangedOnSocialProvider = !request.avatarUrl().equals(user.getAvatarUrl());
+                    boolean modified = false;
+
+                    // Sync avatar URL safely
+                    String currentAvatar = user.getAvatarUrl() != null ? user.getAvatarUrl() : "";
+                    boolean hasDefaultPfp = "/assets/avatars/default-placeholder.png".equals(currentAvatar) || currentAvatar.isEmpty();
+                    boolean currentlyUsingSocialPfp = currentAvatar.contains("googleusercontent.com") 
+                                                    || currentAvatar.contains("intra.42.fr");
+                    boolean pfpHasChangedOnSocialProvider = !request.avatarUrl().equals(currentAvatar);
 
                     if (hasDefaultPfp || (currentlyUsingSocialPfp && pfpHasChangedOnSocialProvider)) {
                         user.setAvatarUrl(request.avatarUrl());
+                        modified = true;
+                    }
+
+                    // Sync email safely if changed on OAuth provider and not taken
+                    if (!request.email().equalsIgnoreCase(user.getEmail())) {
+                        if (!userAuthRepository.existsByEmail(request.email())) {
+                            log.info("Updating email for user UUID [{}] from [{}] to [{}] based on OAuth provider update", 
+                                    user.getUserId(), user.getEmail(), request.email());
+                            user.setEmail(request.email());
+                            modified = true;
+                        } else {
+                            log.warn("OAuth provider returned a new email [{}] for user UUID [{}], but it is already taken. Retaining current email [{}].",
+                                    request.email(), user.getUserId(), user.getEmail());
+                        }
+                    }
+
+                    if (modified) {
                         userAuthRepository.save(user);
                     }
 
-                    return OAuth2UserSummary.fromEntity(identity.getUser());
+                    return OAuth2UserSummary.fromEntity(user);
                 })
-
                 .orElseGet(() -> autoRegisterUser(request));
     }
 
@@ -127,7 +141,17 @@ public class OAuth2Service {
     }
 
     private String generateUniqueUsername(String rawName) {
-        String baseUsername = rawName.replaceAll("\\s+", "_").toLowerCase();
+        if (rawName == null || rawName.isBlank()) {
+            rawName = "user";
+        }
+        // Retain only alphanumeric characters and spaces, then format to underscore lowercase
+        String baseUsername = rawName.replaceAll("[^a-zA-Z0-9\\s]", "")
+                                    .trim()
+                                    .replaceAll("\\s+", "_")
+                                    .toLowerCase();
+        if (baseUsername.isEmpty()) {
+            baseUsername = "user";
+        }
         if (!userAuthRepository.existsByUsername(baseUsername)) {
             return baseUsername;
         }

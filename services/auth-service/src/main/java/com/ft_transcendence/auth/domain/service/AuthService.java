@@ -22,6 +22,7 @@ import com.ft_transcendence.auth.domain.model.twofactor.TwoFactorMethodType;
 import com.ft_transcendence.auth.domain.model.twofactor.UserTwoFactorMethod;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 
+import com.ft_transcendence.common.aspect.LogExecutionTime;
 import java.util.List;
 import java.util.UUID;
 import java.time.LocalDateTime;
@@ -39,6 +40,7 @@ public class AuthService {
      * Registers a new account shell along with its initial LOCAL credentials profile.
      */
     @Transactional
+    @LogExecutionTime("Register New Local Account")
     public UserAuth register(RegisterRequest request) {
         validateRegistrationUnique(request.username(), request.email());
 
@@ -64,6 +66,7 @@ public class AuthService {
      * Executes the primary credentials verification challenge sequence against the security manager.
      */
     @Transactional(readOnly = true)
+    @LogExecutionTime("Verify Credentials and Create Session")
     public AuthStateResult login(LoginRequest request) {
         Authentication authenticationToken = new UsernamePasswordAuthenticationToken(request.login(), request.password());
         Authentication authResult = authenticationManager.authenticate(authenticationToken);

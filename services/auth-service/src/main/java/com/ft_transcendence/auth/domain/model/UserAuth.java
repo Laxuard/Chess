@@ -3,11 +3,7 @@ package com.ft_transcendence.auth.domain.model;
 import com.ft_transcendence.auth.domain.model.twofactor.UserTwoFactorMethod;
 import lombok.*;
 import jakarta.persistence.*;
-import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.annotation.LastModifiedDate;
-import org.springframework.data.jpa.domain.support.AuditingEntityListener;
-
-import java.time.LocalDateTime;
+import com.ft_transcendence.common.model.BaseAuditableEntity;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -21,8 +17,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Table(name = "user_auth")
-@EntityListeners(AuditingEntityListener.class)
-public class UserAuth {
+public class UserAuth extends BaseAuditableEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -95,17 +90,5 @@ public class UserAuth {
         identities.add(identity);
         identity.setUser(this);
     }
-
-    // === Auditing ===
-    @CreatedDate
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt;
-
-    @LastModifiedDate
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
-
-    @Version
-    private Integer version;
 
 }

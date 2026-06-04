@@ -111,7 +111,7 @@ public class TwoFactorService {
 
     private UserAuth fetchUserAuth(UUID userId) {
         return userAuthRepository.findByUserId(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found for ID: " + userId));
+                .orElseThrow(() -> new ResourceNotFoundException("User"));
     }
 
     private UserTwoFactorMethod fetchPendingMethod(UserAuth user, TwoFactorMethodType type) {

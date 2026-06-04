@@ -1,12 +1,9 @@
 package com.ft_transcendence.social.domain.model;
 
+import com.ft_transcendence.common.model.BaseAuditableEntity;
 import jakarta.persistence.*;
 import lombok.*;
-import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.annotation.LastModifiedDate;
-import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
-import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
@@ -16,8 +13,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Table(name = "profile")
-@EntityListeners(AuditingEntityListener.class)
-public class Profile {
+public class Profile extends BaseAuditableEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -40,17 +36,5 @@ public class Profile {
     @Builder.Default
     @Column(name = "profile_hidden")
     private boolean profileHidden = false;
-
-    // === Auditing ===
-    @CreatedDate
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt;
-
-    @LastModifiedDate
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
-
-    @Version
-    private Integer version;
 
 }
