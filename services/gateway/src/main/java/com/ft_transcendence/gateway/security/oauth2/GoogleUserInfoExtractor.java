@@ -24,4 +24,10 @@ public class GoogleUserInfoExtractor implements OAuth2UserInfoExtractor {
     public String getName(OAuth2User oAuth2User) {
         return oAuth2User.getAttribute("name");
     }
+
+    @Override
+    public String getAvatarUrl(OAuth2User oAuth2User) {
+        String picture = oAuth2User.getAttribute("picture");
+        return (picture != null && !picture.isBlank()) ? picture : "/assets/avatars/default-placeholder.png";
+    }
 }

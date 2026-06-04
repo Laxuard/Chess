@@ -17,5 +17,8 @@ public record OAuth2SyncRequest(
         String email,
 
         @NotBlank(message = "User full name cannot be blank")
-        String name
+        String name,
+
+        @NotBlank(message = "Avatar URL cannot be blank")
+        String avatarUrl
 ) {}

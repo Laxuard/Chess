@@ -6,5 +6,6 @@ public interface OAuth2UserInfoExtractor {
     String getRegistrationId();
     String getName(OAuth2User oAuth2User);
     String getEmail(OAuth2User oAuth2User);
+    String getAvatarUrl(OAuth2User oAuth2User);
     String getProviderId(OAuth2User oAuth2User);
 }

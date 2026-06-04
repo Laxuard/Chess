@@ -38,6 +38,20 @@ public class OAuth2Service {
 
                     identity.setLastLoginAt(LocalDateTime.now());
 
+                    UserAuth user = identity.getUser();
+                    
+                    boolean hasDefaultPfp = "/assets/avatars/default-placeholder.png".equals(user.getAvatarUrl());
+                    
+                    boolean currentlyUsingSocialPfp = user.getAvatarUrl().contains("googleusercontent.com") 
+                                                    || user.getAvatarUrl().contains("intra.42.fr");
+                                                    
+                    boolean pfpHasChangedOnSocialProvider = !request.avatarUrl().equals(user.getAvatarUrl());
+
+                    if (hasDefaultPfp || (currentlyUsingSocialPfp && pfpHasChangedOnSocialProvider)) {
+                        user.setAvatarUrl(request.avatarUrl());
+                        userAuthRepository.save(user);
+                    }
+
                     return OAuth2UserSummary.fromEntity(identity.getUser());
                 })
 
@@ -98,6 +112,7 @@ public class OAuth2Service {
         UserAuth newAccount = UserAuth.builder()
                 .username(generateUniqueUsername(request.name()))
                 .email(request.email())
+                .avatarUrl(request.avatarUrl())
                 .build();
 
         UserIdentity socialIdentity = UserIdentity.builder()

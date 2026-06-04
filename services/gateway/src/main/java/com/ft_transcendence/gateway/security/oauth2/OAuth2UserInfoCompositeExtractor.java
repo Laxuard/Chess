@@ -29,9 +29,10 @@ public class OAuth2UserInfoCompositeExtractor {
                 registrationId.toUpperCase(),
                 extractor.getProviderId(oAuth2User),
                 extractor.getEmail(oAuth2User),
-                extractor.getName(oAuth2User)
+                extractor.getName(oAuth2User),
+                extractor.getAvatarUrl(oAuth2User)
         );
     }
 
-    public record OAuth2SyncPayload(String provider, String providerId, String email, String name) {}
+    public record OAuth2SyncPayload(String provider, String providerId, String email, String name, String avatarUrl) {}
 }

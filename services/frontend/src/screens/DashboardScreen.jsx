@@ -5,6 +5,61 @@ import { useAuth } from '../context/AuthContext';
 import { getUsers, getMfaSetup, confirmMfaSetup, unlinkOAuth2Provider, redirectToGoogleOAuth, redirectToFortyTwoOAuth, setLocalPassword } from '../services/api';
 import { QRCodeSVG } from 'qrcode.react';
 
+const DEFAULT_AVATAR = '/assets/avatars/default-placeholder.png';
+
+function isDefaultAvatar(url) {
+  return !url || url === DEFAULT_AVATAR;
+}
+
+function UserAvatar({ url, username, size = 72 }) {
+  const [failed, setFailed] = useState(false);
+  const showFallback = !url || isDefaultAvatar(url) || failed;
+
+  if (showFallback) {
+    // Render initials badge — never crashes
+    const initials = (username || '?').slice(0, 2).toUpperCase();
+    return (
+      <div style={{
+        width: size,
+        height: size,
+        borderRadius: '50%',
+        background: 'linear-gradient(135deg, hsl(175,80%,35%), hsl(250,60%,50%))',
+        border: '2px solid var(--teal-glow)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: size * 0.35,
+        fontWeight: 700,
+        color: '#fff',
+        letterSpacing: '0.05em',
+        flexShrink: 0,
+        boxShadow: '0 0 18px rgba(0,240,200,0.18)',
+        userSelect: 'none',
+      }}>
+        {initials}
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={url}
+      alt={`${username} avatar`}
+      onError={() => setFailed(true)}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: '50%',
+        objectFit: 'cover',
+        border: '2px solid var(--teal-glow)',
+        flexShrink: 0,
+        boxShadow: '0 0 18px rgba(0,240,200,0.18)',
+        transition: 'transform 0.2s ease',
+      }}
+    />
+  );
+}
+
 export default function DashboardScreen() {
   const gatewayPort = typeof __GATEWAY_PORT__ !== 'undefined' ? __GATEWAY_PORT__ : '8080';
   const gatewayOrigin = window.location.port === '5173' ? `https://localhost:${gatewayPort}` : window.location.origin;
@@ -348,15 +403,21 @@ export default function DashboardScreen() {
                       <div style={{ position: 'absolute', top: '12px', right: '12px' }}>
                         <span className="badge badge--online"><span className="badge__dot" />CORE</span>
                       </div>
-                      <span className="text-label" style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', display: 'block', marginBottom: '4px' }}>
+                      <span className="text-label" style={{ color: 'var(--text-secondary)', fontSize: '0.7rem', display: 'block', marginBottom: '12px' }}>
                         CENTRAL USER IDENTITY
                       </span>
-                      <h3 className="text-display" style={{ fontSize: '1.5rem', marginBottom: '4px', color: '#fff' }}>
-                        {profile.username}
-                      </h3>
-                      <span className="text-mono" style={{ fontSize: '0.85rem', color: 'var(--teal-glow)', display: 'block', marginBottom: '16px' }}>
-                        {profile.email}
-                      </span>
+                      {/* Avatar + name row */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
+                        <UserAvatar url={profile.avatarUrl} username={profile.username} size={64} />
+                        <div>
+                          <h3 className="text-display" style={{ fontSize: '1.4rem', marginBottom: '2px', color: '#fff' }}>
+                            {profile.username}
+                          </h3>
+                          <span className="text-mono" style={{ fontSize: '0.82rem', color: 'var(--teal-glow)' }}>
+                            {profile.email}
+                          </span>
+                        </div>
+                      </div>
                       
                       <div className="divider" style={{ margin: '12px 0' }}><span className="divider__line" /></div>
                       

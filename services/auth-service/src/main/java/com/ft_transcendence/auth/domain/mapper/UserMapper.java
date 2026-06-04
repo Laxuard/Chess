@@ -61,6 +61,7 @@ public class UserMapper {
                 .userId(user.getUserId())
                 .username(user.getUsername())
                 .email(user.getEmail())
+                .avatarUrl(user.getAvatarUrl())
                 .roles(userRoles)
                 .enabled(user.isEnabled())
                 .is2faEnabled(user.is2faEnabled())

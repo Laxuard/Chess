@@ -38,6 +38,10 @@ public class UserAuth {
     @Column(unique = true, nullable = false)
     private String username;
 
+    @Builder.Default
+    @Column(name = "avatar_url", nullable = false)
+    private String avatarUrl = "/assets/avatars/default-placeholder.png";
+
     private String password;
 
     @Builder.Default

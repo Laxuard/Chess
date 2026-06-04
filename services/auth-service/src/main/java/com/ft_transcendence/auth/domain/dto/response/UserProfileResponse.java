@@ -15,6 +15,7 @@ public record UserProfileResponse(
         UUID userId,
         String username,
         String email,
+        String avatarUrl,
         List<String> roles,
         boolean enabled,
         boolean is2faEnabled,
