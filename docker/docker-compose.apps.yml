@@ -120,7 +120,36 @@ services:
     networks:
       - transcendence-net
 
-  # == 5. Backend-For-Frontend (BFF) Gateway (Public Entrypoint) ==
+  # == 5. Notification Service (Internal Only) ==
+  notification-service:
+    build:
+      context: ../
+      dockerfile: services/notification-service/Dockerfile
+    image: transcendence-notification-service:latest
+    container_name: notification-service
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - CERT_PASSWORD=${CERT_PASSWORD}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_PORT=6379
+    volumes:
+      - ../certs/services/notification-service/notification-service.p12:/app/certs/services/notification-service/notification-service.p12:ro
+      - ../certs/truststore/truststore.p12:/app/certs/truststore/truststore.p12:ro
+    healthcheck:
+      test: [ "CMD", "curl", "-k", "--cert", "/app/certs/services/notification-service/notification-service.p12:${CERT_PASSWORD}", "--cert-type", "P12", "-f", "https://localhost:8443/actuator/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      config-server:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    networks:
+      - transcendence-net
+
+  # == 6. Backend-For-Frontend (BFF) Gateway (Public Entrypoint) ==
   gateway:
     build:
       context: ../services/gateway
@@ -160,6 +189,8 @@ services:
       auth-service:
         condition: service_healthy
       social-service:
+        condition: service_healthy
+      notification-service:
         condition: service_healthy
     networks:
       - transcendence-net

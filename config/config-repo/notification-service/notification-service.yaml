@@ -1,0 +1,13 @@
+# ==========================================
+# NOTIFICATION SERVICE CORE BASE CONFIGURATION
+# ==========================================
+
+server:
+  forward-headers-strategy: framework
+
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: "https://gateway:8443/.well-known/jwks.json"

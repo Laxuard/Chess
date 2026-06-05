@@ -1,0 +1,15 @@
+# ==========================================
+# NOTIFICATION SERVICE DEV OVERRIDES
+# ==========================================
+
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: ""
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: "https://localhost:8443/.well-known/jwks.json"

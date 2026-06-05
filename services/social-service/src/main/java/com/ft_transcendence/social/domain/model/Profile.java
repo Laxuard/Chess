@@ -28,6 +28,9 @@ public class Profile extends BaseAuditableEntity {
     @Column(name = "avatar_url", nullable = false)
     private String avatarUrl; // Cached avatar synced via Kafka
 
+    @Column(name = "sync_version", nullable = false) // Tracks Auth-Service state timeline only
+    private long syncVersion;
+
     // === Social Domain Specific Fields ===
     @Builder.Default
     @Column(columnDefinition = "TEXT")

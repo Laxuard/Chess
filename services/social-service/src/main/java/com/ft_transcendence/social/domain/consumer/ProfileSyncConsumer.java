@@ -25,17 +25,17 @@ public class ProfileSyncConsumer {
         profileRepository.findByUserId(event.userId())
                 .ifPresentOrElse(
                         profile -> {
-                            Integer currentVersion = profile.getVersion();
-                            long currentVerVal = currentVersion != null ? currentVersion.longValue() : 0L;
-                            if (event.version() >= currentVerVal) {
-                                log.info("Updating existing profile for userId: {}. Stored version: {}, Event version: {}", 
-                                        event.userId(), currentVerVal, event.version());
+                            // Compare directly against our manual auth-timeline version tracking column
+                            if (event.version() >= profile.getSyncVersion()) {
+                                log.info("Updating existing profile for userId: {}. Old Sync Version: {}, New Event version: {}", 
+                                        event.userId(), profile.getSyncVersion(), event.version());
                                 profile.setUsername(event.username());
                                 profile.setAvatarUrl(event.avatarUrl());
+                                profile.setSyncVersion(event.version()); // Lock down the new sequence checkpoint
                                 profileRepository.save(profile);
                             } else {
-                                log.warn("Skipping outdated UserSyncEvent. Stored version: {}, Event version: {}", 
-                                        currentVerVal, event.version());
+                                log.warn("Skipping outdated UserSyncEvent. Stored sync version: {}, Event version: {}", 
+                                        profile.getSyncVersion(), event.version());
                             }
                         },
                         () -> {
@@ -44,6 +44,7 @@ public class ProfileSyncConsumer {
                                     .userId(event.userId())
                                     .username(event.username())
                                     .avatarUrl(event.avatarUrl())
+                                    .syncVersion(event.version()) // Establish the genesis version marker
                                     .build();
                             profileRepository.save(newProfile);
                         }

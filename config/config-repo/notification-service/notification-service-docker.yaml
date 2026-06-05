@@ -1,0 +1,15 @@
+# ==========================================
+# NOTIFICATION SERVICE DOCKER OVERRIDES
+# ==========================================
+
+spring:
+  data:
+    redis:
+      host: redis-container
+      port: ${REDIS_PORT:6379}
+      password: "${REDIS_PASSWORD}"
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: "https://gateway:8443/.well-known/jwks.json"

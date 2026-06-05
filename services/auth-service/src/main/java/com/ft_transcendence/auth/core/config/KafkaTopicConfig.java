@@ -16,6 +16,8 @@ public class KafkaTopicConfig {
         return TopicBuilder.name(USER_SYNC_TOPIC)
                 .partitions(3)
                 .replicas(1)
+                .config(org.apache.kafka.common.config.TopicConfig.CLEANUP_POLICY_CONFIG, 
+                        org.apache.kafka.common.config.TopicConfig.CLEANUP_POLICY_COMPACT)
                 .build();
     }
 

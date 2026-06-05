@@ -117,7 +117,7 @@ case "${1:-}" in
         
     apps)
         check_env_symlink
-        docker rm -f config-server eureka-server auth-service gateway social-service >/dev/null 2>&1 || true
+        docker rm -f config-server eureka-server auth-service gateway social-service notification-service >/dev/null 2>&1 || true
         step "Starting Applications Stack Only"
         docker compose -f "$APPS_COMPOSE" up -d --build
         ;;

@@ -1,0 +1,16 @@
+/home/yjazouli/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/aspect/LogExecutionTime.java
+/home/yjazouli/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/aspect/PerformanceLoggingAspect.java
+/home/yjazouli/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/event/UserDeleteEvent.java
+/home/yjazouli/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/event/UserSyncEvent.java
+/home/yjazouli/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/exception/BadRequestException.java
+/home/yjazouli/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/exception/BaseException.java
+/home/yjazouli/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/exception/DuplicateResourceException.java
+/home/yjazouli/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/exception/GlobalExceptionHandler.java
+/home/yjazouli/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/exception/ResourceNotFoundException.java
+/home/yjazouli/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/filter/TraceIdFilter.java
+/home/yjazouli/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/model/BaseAuditableEntity.java
+/home/yjazouli/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/security/CommonSecurityConfig.java
+/home/yjazouli/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/security/JwtConfig.java
+/home/yjazouli/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/security/ProblemDetailAuthenticationEntryPoint.java
+/home/yjazouli/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/tracing/TracingConfig.java
+/home/yjazouli/1337/Microservices/services/common-core/src/main/java/com/ft_transcendence/common/util/TraceContext.java
