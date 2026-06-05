@@ -39,7 +39,7 @@ public class AuthController {
         
         // Populate the active session properties directly inside the controller tier boundary
         HttpSession session = servletRequest.getSession(true);
-        syncSessionAttributes(savedUser, session);
+        syncSessionAttributes(savedUser, session, servletRequest);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(userMapper.toRegisterResponse(savedUser));
     }
@@ -52,7 +52,7 @@ public class AuthController {
         AuthStateResult stateResult = authService.login(request);
 
         HttpSession session = servletRequest.getSession(true);
-        syncSessionAttributes(stateResult.user(), session);
+        syncSessionAttributes(stateResult.user(), session, servletRequest);
 
         if ("AWAITING_MFA".equals(stateResult.status())) {
             return ResponseEntity.status(HttpStatus.ACCEPTED).body(userMapper.toLoginResponse(stateResult));
@@ -82,15 +82,13 @@ public class AuthController {
         return ResponseEntity.ok().build();
     }
 
-    // ── WEB SESSION HANDSHAKE SYNC ──────────────────────────────────────────
-
-    private void syncSessionAttributes(UserAuth user, HttpSession session) {
+    private void syncSessionAttributes(UserAuth user, HttpSession session, HttpServletRequest request) {
         List<String> roleStrings = user.getRoles().stream()
                 .map(Enum::name)
                 .toList();
 
         session.setAttribute("roles", roleStrings);
-        session.setAttribute("userId", user.getUserId());
+        session.setAttribute("userId", user.getUserId().toString());
         session.setAttribute("isFullyAuthenticated", !user.is2faEnabled());
     }
 }

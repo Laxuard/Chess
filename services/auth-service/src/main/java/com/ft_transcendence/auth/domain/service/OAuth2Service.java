@@ -25,6 +25,7 @@ public class OAuth2Service {
 
     private final UserAuthRepository userAuthRepository;
     private final UserIdentityRepository userIdentityRepository;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
 
     /**
@@ -64,7 +65,14 @@ public class OAuth2Service {
                     }
 
                     if (modified) {
-                        userAuthRepository.save(user);
+                        UserAuth saved = userAuthRepository.save(user);
+                        eventPublisher.publishEvent(new com.ft_transcendence.common.event.UserSyncEvent(
+                                saved.getUserId(),
+                                saved.getUsername(),
+                                saved.getEmail(),
+                                saved.getAvatarUrl(),
+                                saved.getVersion()
+                        ));
                     }
 
                     return OAuth2UserSummary.fromEntity(user);
@@ -137,7 +145,17 @@ public class OAuth2Service {
                 .build();
 
         newAccount.addIdentity(socialIdentity);
-        return OAuth2UserSummary.fromEntity(userAuthRepository.save(newAccount));
+        UserAuth saved = userAuthRepository.save(newAccount);
+        
+        eventPublisher.publishEvent(new com.ft_transcendence.common.event.UserSyncEvent(
+                saved.getUserId(),
+                saved.getUsername(),
+                saved.getEmail(),
+                saved.getAvatarUrl(),
+                saved.getVersion()
+        ));
+
+        return OAuth2UserSummary.fromEntity(saved);
     }
 
     private String generateUniqueUsername(String rawName) {

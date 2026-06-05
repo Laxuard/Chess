@@ -4,3 +4,5 @@ com.ft_transcendence.common.security.JwtConfig
 com.ft_transcendence.common.security.CommonSecurityConfig
 com.ft_transcendence.common.exception.GlobalExceptionHandler
 com.ft_transcendence.common.aspect.PerformanceLoggingAspect
+com.ft_transcendence.common.tracing.TracingConfig
+

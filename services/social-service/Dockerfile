@@ -6,11 +6,11 @@ WORKDIR /app
 
 # Copy the shared common-core library first and install it
 COPY services/common-core ./services/common-core
-RUN mvn -f services/common-core/pom.xml clean install -DskipTests --no-transfer-progress
+RUN --mount=type=cache,target=/root/.m2 mvn -f services/common-core/pom.xml clean install -DskipTests --no-transfer-progress
 
 # Copy social-service sources and build it
 COPY services/social-service ./services/social-service
-RUN mvn -f services/social-service/pom.xml clean package -DskipTests --no-transfer-progress
+RUN --mount=type=cache,target=/root/.m2 mvn -f services/social-service/pom.xml clean package -DskipTests --no-transfer-progress
 
 # ==========================================
 # RUN STAGE

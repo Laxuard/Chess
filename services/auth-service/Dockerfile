@@ -6,11 +6,11 @@ WORKDIR /app
 
 # Copy the shared common-core library first and install it
 COPY services/common-core ./services/common-core
-RUN mvn -f services/common-core/pom.xml clean install -DskipTests --no-transfer-progress
+RUN --mount=type=cache,target=/root/.m2 mvn -f services/common-core/pom.xml clean install -DskipTests --no-transfer-progress
 
 # Copy auth-service sources and build it
 COPY services/auth-service ./services/auth-service
-RUN mvn -f services/auth-service/pom.xml clean package -DskipTests --no-transfer-progress
+RUN --mount=type=cache,target=/root/.m2 mvn -f services/auth-service/pom.xml clean package -DskipTests --no-transfer-progress
 
 # ==========================================
 # RUN STAGE

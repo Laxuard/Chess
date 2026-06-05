@@ -53,6 +53,26 @@ public class SessionToJwtGatewayFilterFactory
                             "An active cookie session is required to traverse this gateway proxy"));
                 }
 
+                // Session Hijacking Protection: Validate Fingerprint
+                String storedFingerprint = webSession.getAttribute("sessionFingerprint");
+                if (storedFingerprint != null) {
+                    String currentFingerprint = generateSessionFingerprint(exchange);
+                    if (!storedFingerprint.equals(currentFingerprint)) {
+                        log.error("CRITICAL: Session fingerprint mismatch detected! Possible session hijacking attempt! " +
+                                "Invalidating session [{}]. Stored: {}, Current: {}", 
+                                webSession.getId(), storedFingerprint, currentFingerprint);
+                        
+                        return webSession.invalidate().then(
+                            Mono.error(new ResponseStatusException(
+                                HttpStatus.UNAUTHORIZED,
+                                "Session compromised. Please re-authenticate."))
+                        );
+                    }
+                } else {
+                    String currentFingerprint = generateSessionFingerprint(exchange);
+                    webSession.getAttributes().put("sessionFingerprint", currentFingerprint);
+                }
+
                 String userId = userIdAttr.toString();
                 String sessionId = webSession.getId();
                 @SuppressWarnings("unchecked")
@@ -70,6 +90,37 @@ public class SessionToJwtGatewayFilterFactory
                 return chain.filter(exchange.mutate().request(mutatedRequest).build());
             });
         };
+    }
+
+    private String generateSessionFingerprint(org.springframework.web.server.ServerWebExchange exchange) {
+        String xff = exchange.getRequest().getHeaders().getFirst("X-Forwarded-For");
+        String ip;
+        if (xff != null && !xff.isBlank()) {
+            ip = xff.split(",")[0].trim();
+        } else {
+            java.net.InetSocketAddress remoteAddress = exchange.getRequest().getRemoteAddress();
+            ip = (remoteAddress != null && remoteAddress.getAddress() != null) 
+                    ? remoteAddress.getAddress().getHostAddress() 
+                    : "unknown";
+        }
+        String userAgent = exchange.getRequest().getHeaders().getFirst("User-Agent");
+        if (userAgent == null) {
+            userAgent = "";
+        }
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            String rawString = ip + "|" + userAgent;
+            byte[] hash = digest.digest(rawString.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) hexString.append('0');
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (Exception e) {
+            return ip + "|" + userAgent;
+        }
     }
 
     public static class Config {

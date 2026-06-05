@@ -86,6 +86,16 @@ spring:
               filters:
                 - StripPrefix=1
 
+            # Secure Route for Notification Service WebSockets
+            - id: notification-service-ws
+              uri: lb:ws://notification-service
+              order: 0
+              predicates:
+                - Path=/ws/connect/**, /ws/connect
+              filters:
+                - SessionToJwt
+                - TwoFactorCheck
+
             # OpenAPI Spec Bypass (High Priority)
             - id: auth-service-openapi-bypass
               uri: lb://auth-service

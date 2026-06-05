@@ -35,6 +35,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final UserAuthRepository userAuthRepository;
     private final AuthenticationManager authenticationManager;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     /**
      * Registers a new account shell along with its initial LOCAL credentials profile.
@@ -59,13 +60,23 @@ public class AuthService {
 
         userAuth.addIdentity(localIdentity);
         
-        return userAuthRepository.save(userAuth);
+        UserAuth saved = userAuthRepository.save(userAuth);
+
+        eventPublisher.publishEvent(new com.ft_transcendence.common.event.UserSyncEvent(
+                saved.getUserId(),
+                saved.getUsername(),
+                saved.getEmail(),
+                saved.getAvatarUrl(),
+                saved.getVersion()
+        ));
+
+        return saved;
     }
 
     /**
      * Executes the primary credentials verification challenge sequence against the security manager.
      */
-    @Transactional(readOnly = true)
+    @Transactional
     @LogExecutionTime("Verify Credentials and Create Session")
     public AuthStateResult login(LoginRequest request) {
         Authentication authenticationToken = new UsernamePasswordAuthenticationToken(request.login(), request.password());
@@ -73,6 +84,13 @@ public class AuthService {
 
         SecurityUser securityUser = (SecurityUser) authResult.getPrincipal();
         UserAuth userAuth = securityUser.userAuth();
+
+        // Update the lastLoginAt timestamp for the LOCAL identity
+        userAuth.getIdentities().stream()
+                .filter(id -> id.getProvider() == AuthProvider.LOCAL)
+                .findFirst()
+                .ifPresent(identity -> identity.setLastLoginAt(LocalDateTime.now()));
+        userAuthRepository.save(userAuth);
 
         if (userAuth.is2faEnabled()) {
             List<TwoFactorMethodType> verifiedMethods = userAuth.getTwoFactorMethods().stream()

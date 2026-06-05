@@ -92,6 +92,46 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(ex.getHttpStatus()).body(addMetadata(problemDetail));
     }
 
+    @ExceptionHandler(org.springframework.dao.ConcurrencyFailureException.class)
+    public ResponseEntity<ProblemDetail> handleConcurrencyFailure(
+            org.springframework.dao.ConcurrencyFailureException ex, HttpServletRequest request) {
+
+        log.warn("Database concurrency failure intercepted on {} {}: {}",
+                request.getMethod(), request.getRequestURI(), ex.getMessage());
+
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT,
+                "The resource was modified by another concurrent transaction. Please retry your request.");
+
+        problem.setType(URI.create(docBaseUrl + "concurrency-conflict"));
+        problem.setTitle("Concurrency Conflict");
+        problem.setInstance(URI.create(request.getRequestURI()));
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(addMetadata(problem));
+    }
+
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<ProblemDetail> handleDataIntegrityViolation(
+            org.springframework.dao.DataIntegrityViolationException ex, HttpServletRequest request) {
+
+        log.error("Data integrity violation intercepted on {} {}: {}",
+                request.getMethod(), request.getRequestURI(), ex.getMessage());
+
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.CONFLICT,
+                "A database integrity constraint was violated (e.g., unique key collision or invalid reference).");
+
+        problem.setType(URI.create(docBaseUrl + "data-integrity-violation"));
+        problem.setTitle("Data Integrity Violation");
+        problem.setInstance(URI.create(request.getRequestURI()));
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(addMetadata(problem));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ProblemDetail> handleUnexpected(
             Exception ex, HttpServletRequest request) {

@@ -104,6 +104,10 @@ public class CustomOAuth2SuccessHandler implements ServerAuthenticationSuccessHa
                     session.getAttributes().put("roles", userSummary.roles());
                     session.getAttributes().put("isFullyAuthenticated", true);
 
+                    // Generate and store session fingerprint to protect against hijacking
+                    String fingerprint = generateSessionFingerprint(exchange);
+                    session.getAttributes().put("sessionFingerprint", fingerprint);
+
                     log.info("OAuth Session registration completed for User ID [{}]", userSummary.userId());
                     return redirectStrategy.sendRedirect(exchange, URI.create(frontendBaseUrl + "/dashboard"));
                 })
@@ -115,6 +119,37 @@ public class CustomOAuth2SuccessHandler implements ServerAuthenticationSuccessHa
     }
 
     // ── PRIVATE UTILITY SCOPES ──────────────────────────────────────────────
+
+    private String generateSessionFingerprint(ServerWebExchange exchange) {
+        String xff = exchange.getRequest().getHeaders().getFirst("X-Forwarded-For");
+        String ip;
+        if (xff != null && !xff.isBlank()) {
+            ip = xff.split(",")[0].trim();
+        } else {
+            java.net.InetSocketAddress remoteAddress = exchange.getRequest().getRemoteAddress();
+            ip = (remoteAddress != null && remoteAddress.getAddress() != null) 
+                    ? remoteAddress.getAddress().getHostAddress() 
+                    : "unknown";
+        }
+        String userAgent = exchange.getRequest().getHeaders().getFirst("User-Agent");
+        if (userAgent == null) {
+            userAgent = "";
+        }
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            String rawString = ip + "|" + userAgent;
+            byte[] hash = digest.digest(rawString.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) hexString.append('0');
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (Exception e) {
+            return ip + "|" + userAgent;
+        }
+    }
 
     private String mintTransitToken(ServerWebExchange exchange, WebSession session, String userId) {
         String traceId = ReactiveTraceContext.getTraceId(exchange);

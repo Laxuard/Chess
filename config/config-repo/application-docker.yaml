@@ -11,6 +11,8 @@ spring:
             location: "file:/app/certs/services/${spring.application.name}/${spring.application.name}.p12"
           truststore:
             location: "file:/app/certs/truststore/truststore.p12"
+  kafka:
+    bootstrap-servers: "kafka:9092"
 
 eureka:
   instance:

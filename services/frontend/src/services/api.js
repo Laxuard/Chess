@@ -175,6 +175,48 @@ export async function logoutUser() {
   return response.status;
 }
 
+// ─── Social Service Endpoints ──────────────────────────────────────────────
+
+/**
+ * GET /api/social/profiles/me
+ */
+export async function getMyProfile() {
+  const response = await apiFetch('/api/social/profiles/me');
+  const data = await response.json().catch(() => ({}));
+  return { status: response.status, data };
+}
+
+/**
+ * PUT /api/social/profiles/me
+ */
+export async function updateMyProfile(bio, profileHidden) {
+  const response = await apiFetch('/api/social/profiles/me', {
+    method: 'PUT',
+    body: JSON.stringify({ bio, profileHidden }),
+  });
+  const data = await response.json().catch(() => ({}));
+  return { status: response.status, data };
+}
+
+/**
+ * GET /api/social/profiles/{username}
+ */
+export async function getProfileByUsername(username) {
+  const response = await apiFetch(`/api/social/profiles/${encodeURIComponent(username)}`);
+  const data = await response.json().catch(() => ({}));
+  return { status: response.status, data };
+}
+
+/**
+ * GET /api/social/profiles
+ */
+export async function getPublicProfiles() {
+  const response = await apiFetch('/api/social/profiles');
+  const data = await response.json().catch(() => ({}));
+  return { status: response.status, data };
+}
+
+
 // ─── Session Interceptor ──────────────────────────────────────────────────
 
 /**
